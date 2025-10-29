@@ -4,51 +4,74 @@
   <meta charset="utf-8">
   <title>Chấm công</title>
   <style>
-    body { font-family: system-ui, Arial, sans-serif; margin: 16px; }
-    .row { margin: 10px 0; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
-    select, button { padding: 6px 10px; }
-    .legend span { display:inline-block; padding:2px 8px; border-radius:10px; border:1px solid #ddd; margin-right:6px; }
-    .pill { border-radius: 10px; padding: 0 8px; font-size: 12px; border: 1px solid #ddd; background:#f8f8f8; }
-    table { border-collapse: collapse; width: 100%; margin-top: 10px; }
-    th, td { border: 1px solid #ddd; text-align: center; padding: 8px; vertical-align:middle; }
-    th { background: #f6f6f6; position: sticky; top: 0; }
-    td.slot { cursor: pointer; user-select: none; min-width:72px; }
-    .Free { background:#e6ffe6; }
-    .Class { background:#fff6d6; }
-    .x { background:#ffe6e6; }
-    .muted { color:#666; margin-left:8px; }
-    .gridwrap { overflow-x:auto; }
-    .counts { font-size:12px; color:#444; margin-top:6px; }
-    .note { font-size:12px; color:#666; }
+    body{font-family:system-ui,Arial,sans-serif;margin:16px}
+    .row{margin:10px 0;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+    select,button{padding:6px 10px}
+    .legend span{display:inline-block;padding:2px 8px;border-radius:10px;border:1px solid #ddd;margin-right:6px}
+    .pill{border-radius:10px;padding:0 8px;font-size:12px;border:1px solid #ddd;background:#f8f8f8}
+    table{border-collapse:collapse;width:100%;margin-top:10px}
+    th,td{border:1px solid #ddd;text-align:center;padding:8px;vertical-align:middle}
+    th{background:#f6f6f6;position:sticky;top:0}
+    td.slot{cursor:pointer;user-select:none;min-width:72px}
+    .Free{background:#e6ffe6}
+    .Class{background:#fff6d6}
+    .x{background:#ffe6e6}
+    .muted{color:#666;margin-left:8px}
+    .gridwrap{overflow-x:auto}
+    .counts{font-size:12px;color:#444;margin-top:6px}
+    .note{font-size:12px;color:#666}
 
-    /* roster panel (single-slot view) */
-    #roster { margin-top: 14px; border:1px solid #ddd; border-radius:8px; padding:10px; background:#fafafa; }
-    #roster h4 { margin:0 0 8px 0; }
-    .col { min-width: 200px; }
-    .tag { display:inline-block; padding:2px 6px; border-radius:8px; border:1px solid #ddd; margin:2px 4px 2px 0; background:#fff; }
+    /* roster (inline under grid — for GRID only) */
+    #roster{margin-top:14px;border:1px solid #ddd;border-radius:8px;padding:10px;background:#fafafa}
+    #roster h4{margin:0 0 8px 0}
+    .col{min-width:200px}
+    .tag{display:inline-block;padding:2px 6px;border-radius:8px;border:1px solid #ddd;margin:2px 4px 2px 0;background:#fff}
 
-    /* weekly schedule board */
-    #schedule { margin-top:16px; }
-    .daywrap { margin-top:12px; }
-    .daytitle { font-weight:700; margin:6px 0; }
-    .slotcard {
-      border:1px solid #e5e5e5; border-radius:10px; padding:10px; background:#fff; margin:8px 0;
-      display:flex; gap:16px; align-items:flex-start; justify-content:space-between;
-    }
-    .slot-left { min-width:140px; }
-    .slot-title { font-weight:600; }
-    .group { min-width: 240px; }
-    .group h5 { margin:0 0 6px 0; font-size:14px; }
-    .names { display:flex; flex-wrap:wrap; gap:6px; }
-    .chip { border:1px solid #ddd; border-radius:14px; padding:3px 8px; background:#f9f9f9; font-size:12px; }
-    .more { font-size:12px; color:#246; cursor:pointer; user-select:none; }
-    .empty { color:#999; font-size:12px; }
-    .slotcard.Free { background:#fbfffb; }
-    .slotcard.Class { background:#fffdf5; }
-    .slotcard.x { background:#fff8f8; }
+    /* weekly (full) */
+    #schedule{margin-top:16px}
+    .daywrap{margin-top:12px}
+    .daytitle{font-weight:700;margin:6px 0}
+    .slotcard{border:1px solid #e5e5e5;border-radius:10px;padding:10px;background:#fff;margin:8px 0;display:flex;gap:16px;align-items:flex-start;justify-content:space-between}
+    .slot-left{min-width:140px}
+    .slot-title{font-weight:600}
+    .group{min-width:240px}
+    .group h5{margin:0 0 6px 0;font-size:14px}
+    .names{display:flex;flex-wrap:wrap;gap:6px}
+    .chip{border:1px solid #ddd;border-radius:14px;padding:3px 8px;background:#f9f9f9;font-size:12px}
+    .more{font-size:12px;color:#246;cursor:pointer;user-select:none}
+    .empty{color:#999;font-size:12px}
+    .slotcard.Free{background:#fbfffb}
+    .slotcard.Class{background:#fffdf5}
+    .slotcard.x{background:#fff8f8}
+
+    /* weekly toolbar */
+    .wkbar{display:flex;gap:8px;align-items:center;margin-top:14px}
+    .btnseg{border:1px solid #d0d7de;border-radius:8px;overflow:hidden}
+    .btnseg button{border:none;background:#fff;padding:6px 10px}
+    .btnseg button.active{background:#eef4ff}
+
+    /* weekly compact list */
+    #weeklyCompact{margin-top:8px;border:1px solid #e5e7eb;border-radius:10px}
+    .crow{display:grid;grid-template-columns:120px repeat(3,1fr);gap:6px;padding:8px;border-top:1px solid #f0f0f0;align-items:center}
+    .crow:first-child{border-top:none}
+    .cday{font-weight:600}
+    .cslot{display:flex;gap:8px;align-items:center}
+    .chipmini{border:1px solid #dfe2e7;border-radius:10px;padding:3px 8px;font-size:12px;background:#fff;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+    .chipmini.Free{background:#eefeef}
+    .chipmini.Class{background:#fff8e5}
+    .chipmini.x{background:#ffecec}
+    .ctr{font-size:11px;color:#444}
+    .tot{font-size:11px;border:1px solid #ccd3db;border-radius:10px;padding:1px 6px;background:#f7f9fc}
+
+    /* modal (for compact click) */
+    .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;z-index:999}
+    .modal{background:#fff;border-radius:10px;min-width:60%;max-width:90%;padding:16px;border:1px solid #e5e7eb;box-shadow:0 10px 30px rgba(0,0,0,.18)}
+    .modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+    .modal .tag{display:inline-block;padding:5px 10px;border-radius:12px;border:1px solid #e1e5ea;background:#fff;margin:4px 6px 0 0}
   </style>
 </head>
 <body>
+  <!-- top bar -->
   <div class="row">
     <button id="prevBtn">◀︎</button>
     <div><b>Tuần:</b> <span id="week"></span> <span class="muted" id="weekRange"></span></div>
@@ -69,271 +92,312 @@
     <span id="status" class="muted"></span>
   </div>
 
+  <!-- grid -->
   <div class="gridwrap" id="grid"></div>
 
-  <!-- Single-slot roster (on click) -->
+  <!-- roster (GRID only) -->
   <div id="roster" style="display:none">
     <h4 id="rosterTitle">Lịch trong ô</h4>
-    <div id="rosterWrap" style="display:flex; gap:20px; flex-wrap:wrap;">
+    <div style="display:flex;gap:20px;flex-wrap:wrap">
       <div class="col"><b>Free</b><div id="rFree"></div></div>
       <div class="col"><b>Class</b><div id="rClass"></div></div>
       <div class="col"><b>x</b><div id="rx"></div></div>
     </div>
   </div>
 
-  <!-- Weekly schedule board -->
+  <!-- weekly toolbar + boards -->
+  <div class="wkbar">
+    <h3 style="margin:0">Lịch đăng ký theo tuần</h3>
+    <div class="btnseg">
+      <button id="btnFull" class="active">Đầy đủ</button>
+      <button id="btnCompact">Rút gọn</button>
+    </div>
+  </div>
   <div id="schedule"></div>
+  <div id="weeklyCompact" style="display:none"></div>
+
+  <!-- modal for compact view -->
+  <div id="modalWrap" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-head">
+        <div id="mTitle" style="font-weight:700"></div>
+        <button id="mClose">Đóng</button>
+      </div>
+      <div>
+        <div style="margin:6px 0"><b>Free</b></div>
+        <div id="mFree"></div>
+        <div style="margin:10px 0 6px"><b>Class</b></div>
+        <div id="mClass"></div>
+        <div style="margin:10px 0 6px"><b>x</b></div>
+        <div id="mx"></div>
+      </div>
+    </div>
+  </div>
 
   <div class="note">Nhấn vào ô để đổi: Trống → Free → Class → x → Trống. Sau khi Lưu, tổng số người và danh sách theo ô sẽ cập nhật.</div>
 
   <script>
-    let INIT = null;
-    let CURRENT_PID = null;  // selected person
-    let CURRENT = {};        // {slot_id: status}
-    let COUNTS = {};         // {slot_id: {Free,Class,x,total}}
-    let ROSTER = {};         // {slot_id: {Free:[{pid,name}],Class:[...],x:[...]}}
-    let ACTIVE_SID = null;   // which slot is being viewed in roster
+    /* === state === */
+    let INIT=null, CURRENT_PID=null, CURRENT={}, COUNTS={}, ROSTER={}, ACTIVE_SID=null;
 
-    /** Helpers **/
-    function cycleStatus(val, list){ const i=list.indexOf(val); return list[(i+1)%list.length]; }
-    function fmtCount(c){ return `F:${c.Free||0} | C:${c.Class||0} | x:${c.x||0}`; }
-    function isoToDate(s){ const [y,m,d]=s.split('-').map(Number); return new Date(y, m-1, d); }
-    function niceDate(d){ return d.toLocaleDateString(undefined,{day:'2-digit',month:'2-digit'}); }
+    /* === helpers === */
+    const cycle=(v,arr)=>arr[(arr.indexOf(v)+1)%arr.length];
+    const fmt=(c)=>`F:${c.Free||0} | C:${c.Class||0} | x:${c.x||0}`;
+    const isoToDate=s=>{const [y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d)};
+    const nice=d=>d.toLocaleDateString(undefined,{day:'2-digit',month:'2-digit'});
 
-    /** Renderers: People dropdown **/
-    function renderPeople() {
-      const sel = document.getElementById('person');
-      if (!INIT.people.length) { sel.innerHTML = `<option>(Không có dữ liệu PEOPLE)</option>`; sel.disabled = true; return; }
-      sel.innerHTML = INIT.people.map(p => `<option value="${p.person_id}">${p.pname} (${p.person_id})</option>`).join('');
-      CURRENT_PID = sel.value;
-      sel.onchange = () => { CURRENT_PID = sel.value; loadPersonGrid(); };
+    /* === people === */
+    function renderPeople(){
+      const sel=document.getElementById('person');
+      if(!INIT.people.length){ sel.innerHTML=`<option>(Không có dữ liệu PEOPLE)</option>`; sel.disabled=true; return; }
+      sel.disabled=false;
+      sel.innerHTML=INIT.people.map(p=>`<option value="${p.person_id}">${p.pname} (${p.person_id})</option>`).join('');
+      CURRENT_PID=sel.value;
+      sel.onchange=()=>{ CURRENT_PID=sel.value; loadPersonGrid(); };
     }
 
-    /** Grid (interactive) **/
-    function paintCell(td, myStatus, slotCounts) {
-      const mine = td.querySelector('.mine');
-      mine.textContent = myStatus || '';
-      td.className = `slot ${myStatus || ''}`;
-      const cdiv = td.querySelector('.counts');
-      cdiv.textContent = fmtCount(slotCounts);
+    /* === grid === */
+    function paintCell(td,my,counts){
+      td.querySelector('.mine').textContent=my||'';
+      td.className=`slot ${my||''}`;
+      td.querySelector('.counts').textContent=fmt(counts);
     }
-    function renderGrid() {
-      const days = INIT.days, blocks = INIT.blocks;
-      const table = document.createElement('table');
-      const thead = document.createElement('thead');
-      const headRow = document.createElement('tr');
-      headRow.innerHTML = `<th>Block \\ Day</th>` + days.map(d=>`<th>${d}</th>`).join('');
-      thead.appendChild(headRow); table.appendChild(thead);
+    function renderGrid(){
+      const {days,blocks,weekStart}=INIT;
+      const table=document.createElement('table');
+      const thead=document.createElement('thead');
+      thead.innerHTML=`<tr><th>Block \\ Day</th>${days.map(d=>`<th>${d}</th>`).join('')}</tr>`;
+      table.appendChild(thead);
+      const tbody=document.createElement('tbody');
 
-      const tbody = document.createElement('tbody');
-      blocks.forEach(b => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `<th>${b}</th>` + days.map(d => {
-          const sid = `${INIT.weekStart}|${d}|${b}`;
-          const count = COUNTS[sid] || {Free:0,Class:0,x:0,total:0};
+      blocks.forEach(b=>{
+        const tr=document.createElement('tr');
+        tr.innerHTML=`<th>${b}</th>`+days.map(d=>{
+          const sid=`${weekStart}|${d}|${b}`;
+          const c=COUNTS[sid]||{Free:0,Class:0,x:0,total:0};
           return `<td class="slot" data-sid="${sid}">
                     <div class="mine"></div>
-                    <div class="counts">${fmtCount(count)}</div>
+                    <div class="counts">${fmt(c)}</div>
                   </td>`;
         }).join('');
         tbody.appendChild(tr);
       });
       table.appendChild(tbody);
+      const wrap=document.getElementById('grid');
+      wrap.innerHTML=''; wrap.appendChild(table);
 
-      const wrap = document.getElementById('grid');
-      wrap.innerHTML = '';
-      wrap.appendChild(table);
-
-      // Click handlers (toggle + show roster view)
-      wrap.querySelectorAll('td.slot').forEach(td => {
-        td.onclick = () => {
-          const sid = td.dataset.sid;
-          ACTIVE_SID = sid;
-          const next = cycleStatus(CURRENT[sid] || '', INIT.statuses);
-          CURRENT[sid] = next;
-          paintCell(td, next, COUNTS[sid] || {});
-          showRoster(sid);
+      // GRID click -> toggle & show INLINE roster under grid
+      wrap.querySelectorAll('td.slot').forEach(td=>{
+        td.onclick=()=>{
+          const sid=td.dataset.sid;
+          ACTIVE_SID=sid;
+          const next=cycle(CURRENT[sid]||'',INIT.statuses);
+          CURRENT[sid]=next;
+          paintCell(td,next,COUNTS[sid]||{});
+          showRosterInline(sid);   // only for grid
         };
       });
     }
-    function loadPersonGrid() {
-      CURRENT = Object.assign({}, (INIT.responsesByPerson[CURRENT_PID] || {}));
-      document.querySelectorAll('td.slot').forEach(td => {
-        const sid = td.dataset.sid;
-        paintCell(td, CURRENT[sid] || '', COUNTS[sid] || {});
+    function loadPersonGrid(){
+      CURRENT=Object.assign({},(INIT.responsesByPerson[CURRENT_PID]||{}));
+      document.querySelectorAll('td.slot').forEach(td=>{
+        const sid=td.dataset.sid;
+        paintCell(td,CURRENT[sid]||'',COUNTS[sid]||{});
       });
-      document.getElementById('status').textContent = '';
+      document.getElementById('status').textContent='';
     }
 
-    /** Single-slot roster panel **/
-    function showRoster(sid){
-      const r = ROSTER[sid] || {Free:[],Class:[],x:[]};
-      const parts = sid.split('|'); // yyyy-mm-dd|DAY|BLOCK
-      const d = isoToDate(parts[0]);
-      const title = `${parts[1]} ${parts[2]} — ${niceDate(d)}`;
-      document.getElementById('rosterTitle').textContent = title;
-
-      function renderList(elId, arr){
-        const el = document.getElementById(elId); el.innerHTML = '';
-        if (!arr.length) { el.innerHTML = '<span class="muted">—</span>'; return; }
-        arr.forEach(it => {
-          const tag = document.createElement('span');
-          tag.className = 'tag';
-          tag.textContent = it.name ? `${it.name} (${it.pid})` : it.pid;
+    /* === roster (inline for GRID) === */
+    function showRosterInline(sid){
+      const r=ROSTER[sid]||{Free:[],Class:[],x:[]};
+      const [iso,day,block]=sid.split('|');
+      const title=`${day} ${block} — ${nice(isoToDate(iso))}`;
+      document.getElementById('rosterTitle').textContent=title;
+      const put=(id,arr)=>{
+        const el=document.getElementById(id); el.innerHTML='';
+        if(!arr.length){ el.innerHTML='<span class="muted">—</span>'; return; }
+        arr.forEach(p=>{
+          const tag=document.createElement('span'); tag.className='tag';
+          tag.textContent=p.name ? `${p.name} (${p.pid})` : p.pid;
           el.appendChild(tag);
         });
-      }
-      renderList('rFree', r.Free||[]);
-      renderList('rClass', r.Class||[]);
-      renderList('rx', r.x||[]);
-      document.getElementById('roster').style.display = 'block';
+      };
+      put('rFree',r.Free||[]); put('rClass',r.Class||[]); put('rx',r.x||[]);
+      document.getElementById('roster').style.display='block';
     }
 
-    /** Weekly schedule board (all slots with expandable lists) **/
-    function renderSchedule() {
-      const days = INIT.days, blocks = INIT.blocks;
-      const host = document.getElementById('schedule');
-      host.innerHTML = '';
+    /* === weekly (full) === */
+    function renderSchedule(){
+      const host=document.getElementById('schedule'); host.innerHTML='';
+      const {days,blocks,weekStart}=INIT;
 
-      // Title
-      const t = document.createElement('h3');
-      t.textContent = 'Lịch đăng ký theo tuần';
-      host.appendChild(t);
+      days.forEach(day=>{
+        const dayWrap=document.createElement('div'); dayWrap.className='daywrap';
+        dayWrap.innerHTML=`<div class="daytitle">${day}</div>`;
+        blocks.forEach(block=>{
+          const sid=`${weekStart}|${day}|${block}`;
+          const roster=ROSTER[sid]||{Free:[],Class:[],x:[]};
+          const card=document.createElement('div'); card.className='slotcard';
+          let top='Free',n=0; ['Free','Class','x'].forEach(k=>{const m=(roster[k]||[]).length; if(m>n){n=m;top=k;}});
+          card.classList.add(top);
 
-      // Build per-day cards
-      days.forEach(day => {
-        const dayWrap = document.createElement('div');
-        dayWrap.className = 'daywrap';
-        const title = document.createElement('div');
-        title.className = 'daytitle';
-        title.textContent = day;
-        dayWrap.appendChild(title);
-
-        blocks.forEach(block => {
-          const sid = `${INIT.weekStart}|${day}|${block}`;
-          const roster = ROSTER[sid] || {Free:[],Class:[],x:[]};
-
-          const card = document.createElement('div');
-          card.className = 'slotcard';
-          // color hint based on most-populated group
-          let topK = 'Free', topN = 0;
-          ['Free','Class','x'].forEach(k => { const n=(roster[k]||[]).length; if (n>topN) {topN=n; topK=k;}});
-          card.classList.add(topK);
-
-          const left = document.createElement('div');
-          left.className = 'slot-left';
-          left.innerHTML = `<div class="slot-title">${block}</div>
-                            <div class="muted">${sid.split('|')[0]}</div>`;
+          const left=document.createElement('div'); left.className='slot-left';
+          left.innerHTML=`<div class="slot-title">${block}</div><div class="muted">${sid.split('|')[0]}</div>`;
           card.appendChild(left);
 
-          // group renderer with "view more"
-          function groupCol(label, arr, idKey) {
-            const col = document.createElement('div'); col.className='group';
-            const h5 = document.createElement('h5'); h5.textContent = label; col.appendChild(h5);
-            const names = document.createElement('div'); names.className = 'names'; col.appendChild(names);
-
-            const maxShow = 5;
-            function paint(limit) {
-              names.innerHTML = '';
-              if (!arr || !arr.length) { names.innerHTML = `<span class="empty">—</span>`; return; }
-              arr.slice(0, limit).forEach(p => {
-                const chip = document.createElement('span');
-                chip.className = 'chip';
-                chip.textContent = p.name ? `${p.name} (${p.pid})` : p.pid;
+          const group=(label,arr)=>{
+            const col=document.createElement('div'); col.className='group';
+            col.innerHTML=`<h5>${label}</h5><div class="names"></div>`;
+            const names=col.querySelector('.names');
+            const MAX=5;
+            const paint=(limit)=>{
+              names.innerHTML='';
+              if(!arr||!arr.length){ names.innerHTML='<span class="empty">—</span>'; return; }
+              arr.slice(0,limit).forEach(p=>{
+                const chip=document.createElement('span'); chip.className='chip';
+                chip.textContent=p.name ? `${p.name} (${p.pid})` : p.pid;
                 names.appendChild(chip);
               });
-            }
-            paint(maxShow);
-
-            if (arr && arr.length > maxShow) {
-              const more = document.createElement('span');
-              more.className = 'more';
-              const rest = arr.length - maxShow;
-              more.textContent = `+${rest} xem thêm`;
-              let expanded = false;
-              more.onclick = () => {
-                expanded = !expanded;
-                paint(expanded ? arr.length : maxShow);
-                more.textContent = expanded ? 'Ẩn bớt' : `+${rest} xem thêm`;
-              };
+            };
+            paint(MAX);
+            if(arr&&arr.length>MAX){
+              const more=document.createElement('span'); more.className='more';
+              let open=false; const rest=arr.length-MAX;
+              more.textContent=`+${rest} xem thêm`;
+              more.onclick=()=>{ open=!open; paint(open?arr.length:MAX); more.textContent=open?'Ẩn bớt':`+${rest} xem thêm`; };
               col.appendChild(more);
             }
             return col;
-          }
+          };
 
-          card.appendChild(groupCol('Free', roster.Free || []));
-          card.appendChild(groupCol('Class', roster.Class || []));
-          card.appendChild(groupCol('x', roster.x || []));
-
+          card.appendChild(group('Free',roster.Free||[]));
+          card.appendChild(group('Class',roster.Class||[]));
+          card.appendChild(group('x',roster.x||[]));
           dayWrap.appendChild(card);
         });
-
         host.appendChild(dayWrap);
       });
     }
 
-    /** Save + Refresh **/
-    function saveAll() {
-      if (!CURRENT_PID) return;
-      const rows = Object.keys(CURRENT).map(sid => ({
-        person_id: CURRENT_PID, slot_id: sid, status: CURRENT[sid] || ''
-      }));
-      document.getElementById('status').textContent = 'Saving...';
-      google.script.run.withSuccessHandler((res) => {
-        document.getElementById('status').textContent = `✔ Saved (updated: ${res.updated}, inserted: ${res.inserted}) — refreshing…`;
-        refreshState(); // pull fresh counts + roster
-      }).withFailureHandler(err => {
-        document.getElementById('status').textContent = 'Error: ' + (err.message || err);
+    /* === weekly (compact) === */
+    function renderWeeklyCompact(){
+      const box=document.getElementById('weeklyCompact'); box.innerHTML='';
+      const {days,blocks,weekStart}=INIT;
+
+      days.forEach(day=>{
+        const row=document.createElement('div'); row.className='crow';
+        row.innerHTML=`<div class="cday">${day}</div>`;
+        blocks.forEach(block=>{
+          const sid=`${weekStart}|${day}|${block}`;
+          const c=COUNTS[sid]||{Free:0,Class:0,x:0};
+          const most = (c.Free>=c.Class && c.Free>=c.x) ? 'Free' : (c.Class>=c.x ? 'Class' : 'x');
+          const total=(c.Free||0)+(c.Class||0)+(c.x||0);
+
+          const cell=document.createElement('div'); cell.className='cslot';
+
+          const chip=document.createElement('span'); chip.className=`chipmini ${most}`;
+          chip.innerHTML=`${block} <span class="tot">${total}</span>`;
+          chip.title=`${day} ${block}`;
+          chip.onclick=()=>openRosterModal(sid, day, block);
+
+          const ctr=document.createElement('span'); ctr.className='ctr';
+          ctr.textContent=`F:${c.Free||0} C:${c.Class||0} x:${c.x||0}`;
+
+          cell.appendChild(chip); cell.appendChild(ctr);
+          row.appendChild(cell);
+        });
+        box.appendChild(row);
+      });
+    }
+
+    /* === modal roster for compact === */
+    function openRosterModal(sid, day, block){
+      // ensure the inline roster doesn't re-appear
+      document.getElementById('roster').style.display='none';
+
+      const r=ROSTER[sid]||{Free:[],Class:[],x:[]};
+      const [iso]=sid.split('|');
+      document.getElementById('mTitle').textContent=`${day} ${block} — ${nice(isoToDate(iso))}`;
+
+      const put=(id,arr)=>{
+        const el=document.getElementById(id); el.innerHTML='';
+        if(!arr.length){ el.innerHTML='<span class="muted">—</span>'; return; }
+        arr.forEach(p=>{
+          const tag=document.createElement('span'); tag.className='tag';
+          tag.textContent=p.name ? `${p.name} (${p.pid})` : p.pid;
+          el.appendChild(tag);
+        });
+      };
+      put('mFree',r.Free||[]); put('mClass',r.Class||[]); put('mx',r.x||[]);
+
+      document.getElementById('modalWrap').style.display='flex';
+    }
+
+    document.getElementById('mClose').onclick=()=>{ document.getElementById('modalWrap').style.display='none'; };
+
+    /* === save / refresh === */
+    function saveAll(){
+      if(!CURRENT_PID) return;
+      const rows=Object.keys(CURRENT).map(sid=>({person_id:CURRENT_PID,slot_id:sid,status:CURRENT[sid]||''}));
+      document.getElementById('status').textContent='Saving...';
+      google.script.run.withSuccessHandler(res=>{
+        document.getElementById('status').textContent=`✔ Saved (updated: ${res.updated}, inserted: ${res.inserted}) — refreshing…`;
+        refreshState();
+      }).withFailureHandler(err=>{
+        document.getElementById('status').textContent='Error: '+(err.message||err);
       }).saveResponses(rows);
     }
-    function refreshState() {
-      google.script.run.withSuccessHandler((st) => {
-        INIT.responsesByPerson = st.responsesByPerson;
-        COUNTS = st.countsBySlot || {};
-        ROSTER = st.rosterBySlot || {};
+    function refreshState(){
+      google.script.run.withSuccessHandler(st=>{
+        INIT.responsesByPerson=st.responsesByPerson;
+        COUNTS=st.countsBySlot||{}; ROSTER=st.rosterBySlot||{};
         loadPersonGrid();
-        if (ACTIVE_SID) showRoster(ACTIVE_SID);
-        renderSchedule();
-        document.getElementById('status').textContent = 'Đã cập nhật.';
-      }).withFailureHandler(err => {
-        document.getElementById('status').textContent = 'Refresh failed: ' + (err.message || err);
+        // keep inline roster only for grid interactions
+        if(ACTIVE_SID && document.getElementById('schedule').style.display!=='none'){
+          // no-op; inline roster shown only by grid click
+        }
+        renderSchedule(); renderWeeklyCompact();
+        document.getElementById('status').textContent='Đã cập nhật.';
+      }).withFailureHandler(err=>{
+        document.getElementById('status').textContent='Refresh failed: '+(err.message||err);
       }).getState();
     }
 
-    /** Week navigation **/
+    /* === week nav / bootstrap === */
     function applyWeekModel(res){
-      INIT = res;
-      COUNTS = res.countsBySlot || {};
-      ROSTER = res.rosterBySlot || {};
-      document.getElementById('week').textContent = res.weekStart + ' (GMT+7)';
-      document.getElementById('weekRange').textContent = ' [' + res.weekRange.label + ']';
-      renderPeople();
-      renderGrid();
-      if (INIT.people.length) loadPersonGrid();
-      ACTIVE_SID = null;
-      document.getElementById('roster').style.display = 'none';
-      renderSchedule(); // build the weekly schedule list
+      INIT=res; COUNTS=res.countsBySlot||{}; ROSTER=res.rosterBySlot||{};
+      document.getElementById('week').textContent=res.weekStart+' (GMT+7)';
+      document.getElementById('weekRange').textContent=' ['+res.weekRange.label+']';
+      renderPeople(); renderGrid(); if(INIT.people.length) loadPersonGrid();
+      ACTIVE_SID=null; document.getElementById('roster').style.display='none';
+      renderSchedule(); renderWeeklyCompact();
     }
-    function prevWeek(){
-      google.script.run.withSuccessHandler(applyWeekModel)
-        .withFailureHandler(e=>{ document.getElementById('status').textContent='Prev failed: '+(e.message||e); })
-        .changeWeek(-1);
-    }
-    function nextWeek(){
-      google.script.run.withSuccessHandler(applyWeekModel)
-        .withFailureHandler(e=>{ document.getElementById('status').textContent='Next failed: '+(e.message||e); })
-        .changeWeek(1);
-    }
+    const prevWeek=()=>google.script.run.withSuccessHandler(applyWeekModel).withFailureHandler(e=>{document.getElementById('status').textContent='Prev failed: '+(e.message||e)}).changeWeek(-1);
+    const nextWeek=()=>google.script.run.withSuccessHandler(applyWeekModel).withFailureHandler(e=>{document.getElementById('status').textContent='Next failed: '+(e.message||e)}).changeWeek(1);
 
-    document.getElementById('saveBtn').onclick = saveAll;
-    document.getElementById('refreshBtn').onclick = refreshState;
-    document.getElementById('prevBtn').onclick = prevWeek;
-    document.getElementById('nextBtn').onclick = nextWeek;
+    document.getElementById('saveBtn').onclick=saveAll;
+    document.getElementById('refreshBtn').onclick=refreshState;
+    document.getElementById('prevBtn').onclick=prevWeek;
+    document.getElementById('nextBtn').onclick=nextWeek;
 
-    /** Bootstrap **/
+    // Weekly toggle (hide inline roster when entering compact)
+    const btnFull=document.getElementById('btnFull');
+    const btnCompact=document.getElementById('btnCompact');
+    btnFull.onclick=()=>{ 
+      btnFull.classList.add('active'); btnCompact.classList.remove('active'); 
+      document.getElementById('schedule').style.display='block'; 
+      document.getElementById('weeklyCompact').style.display='none';
+    };
+    btnCompact.onclick=()=>{ 
+      btnCompact.classList.add('active'); btnFull.classList.remove('active'); 
+      document.getElementById('schedule').style.display='none'; 
+      document.getElementById('weeklyCompact').style.display='block';
+      document.getElementById('roster').style.display='none'; // prevent the “middle cell” from reappearing
+    };
+
     (function init(){
       google.script.run.withSuccessHandler(applyWeekModel)
-        .withFailureHandler(err => { document.getElementById('status').textContent = 'Init error: ' + (err.message || err); })
+        .withFailureHandler(err=>{ document.getElementById('status').textContent='Init error: '+(err.message||err); })
         .getInitData();
     })();
   </script>
