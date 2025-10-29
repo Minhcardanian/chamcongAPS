@@ -1,0 +1,341 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Chấm công</title>
+  <style>
+    body { font-family: system-ui, Arial, sans-serif; margin: 16px; }
+    .row { margin: 10px 0; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    select, button { padding: 6px 10px; }
+    .legend span { display:inline-block; padding:2px 8px; border-radius:10px; border:1px solid #ddd; margin-right:6px; }
+    .pill { border-radius: 10px; padding: 0 8px; font-size: 12px; border: 1px solid #ddd; background:#f8f8f8; }
+    table { border-collapse: collapse; width: 100%; margin-top: 10px; }
+    th, td { border: 1px solid #ddd; text-align: center; padding: 8px; vertical-align:middle; }
+    th { background: #f6f6f6; position: sticky; top: 0; }
+    td.slot { cursor: pointer; user-select: none; min-width:72px; }
+    .Free { background:#e6ffe6; }
+    .Class { background:#fff6d6; }
+    .x { background:#ffe6e6; }
+    .muted { color:#666; margin-left:8px; }
+    .gridwrap { overflow-x:auto; }
+    .counts { font-size:12px; color:#444; margin-top:6px; }
+    .note { font-size:12px; color:#666; }
+
+    /* roster panel (single-slot view) */
+    #roster { margin-top: 14px; border:1px solid #ddd; border-radius:8px; padding:10px; background:#fafafa; }
+    #roster h4 { margin:0 0 8px 0; }
+    .col { min-width: 200px; }
+    .tag { display:inline-block; padding:2px 6px; border-radius:8px; border:1px solid #ddd; margin:2px 4px 2px 0; background:#fff; }
+
+    /* weekly schedule board */
+    #schedule { margin-top:16px; }
+    .daywrap { margin-top:12px; }
+    .daytitle { font-weight:700; margin:6px 0; }
+    .slotcard {
+      border:1px solid #e5e5e5; border-radius:10px; padding:10px; background:#fff; margin:8px 0;
+      display:flex; gap:16px; align-items:flex-start; justify-content:space-between;
+    }
+    .slot-left { min-width:140px; }
+    .slot-title { font-weight:600; }
+    .group { min-width: 240px; }
+    .group h5 { margin:0 0 6px 0; font-size:14px; }
+    .names { display:flex; flex-wrap:wrap; gap:6px; }
+    .chip { border:1px solid #ddd; border-radius:14px; padding:3px 8px; background:#f9f9f9; font-size:12px; }
+    .more { font-size:12px; color:#246; cursor:pointer; user-select:none; }
+    .empty { color:#999; font-size:12px; }
+    .slotcard.Free { background:#fbfffb; }
+    .slotcard.Class { background:#fffdf5; }
+    .slotcard.x { background:#fff8f8; }
+  </style>
+</head>
+<body>
+  <div class="row">
+    <button id="prevBtn">◀︎</button>
+    <div><b>Tuần:</b> <span id="week"></span> <span class="muted" id="weekRange"></span></div>
+    <div class="legend">
+      <span class="Free">Free</span>
+      <span class="Class">Class</span>
+      <span class="x">x</span>
+      <span class="pill">Số người / slot hiển thị ở góc</span>
+    </div>
+    <button id="nextBtn">▶︎</button>
+  </div>
+
+  <div class="row">
+    <label><b>Người:</b></label>
+    <select id="person"></select>
+    <button id="saveBtn">Lưu</button>
+    <button id="refreshBtn">Làm mới</button>
+    <span id="status" class="muted"></span>
+  </div>
+
+  <div class="gridwrap" id="grid"></div>
+
+  <!-- Single-slot roster (on click) -->
+  <div id="roster" style="display:none">
+    <h4 id="rosterTitle">Lịch trong ô</h4>
+    <div id="rosterWrap" style="display:flex; gap:20px; flex-wrap:wrap;">
+      <div class="col"><b>Free</b><div id="rFree"></div></div>
+      <div class="col"><b>Class</b><div id="rClass"></div></div>
+      <div class="col"><b>x</b><div id="rx"></div></div>
+    </div>
+  </div>
+
+  <!-- Weekly schedule board -->
+  <div id="schedule"></div>
+
+  <div class="note">Nhấn vào ô để đổi: Trống → Free → Class → x → Trống. Sau khi Lưu, tổng số người và danh sách theo ô sẽ cập nhật.</div>
+
+  <script>
+    let INIT = null;
+    let CURRENT_PID = null;  // selected person
+    let CURRENT = {};        // {slot_id: status}
+    let COUNTS = {};         // {slot_id: {Free,Class,x,total}}
+    let ROSTER = {};         // {slot_id: {Free:[{pid,name}],Class:[...],x:[...]}}
+    let ACTIVE_SID = null;   // which slot is being viewed in roster
+
+    /** Helpers **/
+    function cycleStatus(val, list){ const i=list.indexOf(val); return list[(i+1)%list.length]; }
+    function fmtCount(c){ return `F:${c.Free||0} | C:${c.Class||0} | x:${c.x||0}`; }
+    function isoToDate(s){ const [y,m,d]=s.split('-').map(Number); return new Date(y, m-1, d); }
+    function niceDate(d){ return d.toLocaleDateString(undefined,{day:'2-digit',month:'2-digit'}); }
+
+    /** Renderers: People dropdown **/
+    function renderPeople() {
+      const sel = document.getElementById('person');
+      if (!INIT.people.length) { sel.innerHTML = `<option>(Không có dữ liệu PEOPLE)</option>`; sel.disabled = true; return; }
+      sel.innerHTML = INIT.people.map(p => `<option value="${p.person_id}">${p.pname} (${p.person_id})</option>`).join('');
+      CURRENT_PID = sel.value;
+      sel.onchange = () => { CURRENT_PID = sel.value; loadPersonGrid(); };
+    }
+
+    /** Grid (interactive) **/
+    function paintCell(td, myStatus, slotCounts) {
+      const mine = td.querySelector('.mine');
+      mine.textContent = myStatus || '';
+      td.className = `slot ${myStatus || ''}`;
+      const cdiv = td.querySelector('.counts');
+      cdiv.textContent = fmtCount(slotCounts);
+    }
+    function renderGrid() {
+      const days = INIT.days, blocks = INIT.blocks;
+      const table = document.createElement('table');
+      const thead = document.createElement('thead');
+      const headRow = document.createElement('tr');
+      headRow.innerHTML = `<th>Block \\ Day</th>` + days.map(d=>`<th>${d}</th>`).join('');
+      thead.appendChild(headRow); table.appendChild(thead);
+
+      const tbody = document.createElement('tbody');
+      blocks.forEach(b => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<th>${b}</th>` + days.map(d => {
+          const sid = `${INIT.weekStart}|${d}|${b}`;
+          const count = COUNTS[sid] || {Free:0,Class:0,x:0,total:0};
+          return `<td class="slot" data-sid="${sid}">
+                    <div class="mine"></div>
+                    <div class="counts">${fmtCount(count)}</div>
+                  </td>`;
+        }).join('');
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody);
+
+      const wrap = document.getElementById('grid');
+      wrap.innerHTML = '';
+      wrap.appendChild(table);
+
+      // Click handlers (toggle + show roster view)
+      wrap.querySelectorAll('td.slot').forEach(td => {
+        td.onclick = () => {
+          const sid = td.dataset.sid;
+          ACTIVE_SID = sid;
+          const next = cycleStatus(CURRENT[sid] || '', INIT.statuses);
+          CURRENT[sid] = next;
+          paintCell(td, next, COUNTS[sid] || {});
+          showRoster(sid);
+        };
+      });
+    }
+    function loadPersonGrid() {
+      CURRENT = Object.assign({}, (INIT.responsesByPerson[CURRENT_PID] || {}));
+      document.querySelectorAll('td.slot').forEach(td => {
+        const sid = td.dataset.sid;
+        paintCell(td, CURRENT[sid] || '', COUNTS[sid] || {});
+      });
+      document.getElementById('status').textContent = '';
+    }
+
+    /** Single-slot roster panel **/
+    function showRoster(sid){
+      const r = ROSTER[sid] || {Free:[],Class:[],x:[]};
+      const parts = sid.split('|'); // yyyy-mm-dd|DAY|BLOCK
+      const d = isoToDate(parts[0]);
+      const title = `${parts[1]} ${parts[2]} — ${niceDate(d)}`;
+      document.getElementById('rosterTitle').textContent = title;
+
+      function renderList(elId, arr){
+        const el = document.getElementById(elId); el.innerHTML = '';
+        if (!arr.length) { el.innerHTML = '<span class="muted">—</span>'; return; }
+        arr.forEach(it => {
+          const tag = document.createElement('span');
+          tag.className = 'tag';
+          tag.textContent = it.name ? `${it.name} (${it.pid})` : it.pid;
+          el.appendChild(tag);
+        });
+      }
+      renderList('rFree', r.Free||[]);
+      renderList('rClass', r.Class||[]);
+      renderList('rx', r.x||[]);
+      document.getElementById('roster').style.display = 'block';
+    }
+
+    /** Weekly schedule board (all slots with expandable lists) **/
+    function renderSchedule() {
+      const days = INIT.days, blocks = INIT.blocks;
+      const host = document.getElementById('schedule');
+      host.innerHTML = '';
+
+      // Title
+      const t = document.createElement('h3');
+      t.textContent = 'Lịch đăng ký theo tuần';
+      host.appendChild(t);
+
+      // Build per-day cards
+      days.forEach(day => {
+        const dayWrap = document.createElement('div');
+        dayWrap.className = 'daywrap';
+        const title = document.createElement('div');
+        title.className = 'daytitle';
+        title.textContent = day;
+        dayWrap.appendChild(title);
+
+        blocks.forEach(block => {
+          const sid = `${INIT.weekStart}|${day}|${block}`;
+          const roster = ROSTER[sid] || {Free:[],Class:[],x:[]};
+
+          const card = document.createElement('div');
+          card.className = 'slotcard';
+          // color hint based on most-populated group
+          let topK = 'Free', topN = 0;
+          ['Free','Class','x'].forEach(k => { const n=(roster[k]||[]).length; if (n>topN) {topN=n; topK=k;}});
+          card.classList.add(topK);
+
+          const left = document.createElement('div');
+          left.className = 'slot-left';
+          left.innerHTML = `<div class="slot-title">${block}</div>
+                            <div class="muted">${sid.split('|')[0]}</div>`;
+          card.appendChild(left);
+
+          // group renderer with "view more"
+          function groupCol(label, arr, idKey) {
+            const col = document.createElement('div'); col.className='group';
+            const h5 = document.createElement('h5'); h5.textContent = label; col.appendChild(h5);
+            const names = document.createElement('div'); names.className = 'names'; col.appendChild(names);
+
+            const maxShow = 5;
+            function paint(limit) {
+              names.innerHTML = '';
+              if (!arr || !arr.length) { names.innerHTML = `<span class="empty">—</span>`; return; }
+              arr.slice(0, limit).forEach(p => {
+                const chip = document.createElement('span');
+                chip.className = 'chip';
+                chip.textContent = p.name ? `${p.name} (${p.pid})` : p.pid;
+                names.appendChild(chip);
+              });
+            }
+            paint(maxShow);
+
+            if (arr && arr.length > maxShow) {
+              const more = document.createElement('span');
+              more.className = 'more';
+              const rest = arr.length - maxShow;
+              more.textContent = `+${rest} xem thêm`;
+              let expanded = false;
+              more.onclick = () => {
+                expanded = !expanded;
+                paint(expanded ? arr.length : maxShow);
+                more.textContent = expanded ? 'Ẩn bớt' : `+${rest} xem thêm`;
+              };
+              col.appendChild(more);
+            }
+            return col;
+          }
+
+          card.appendChild(groupCol('Free', roster.Free || []));
+          card.appendChild(groupCol('Class', roster.Class || []));
+          card.appendChild(groupCol('x', roster.x || []));
+
+          dayWrap.appendChild(card);
+        });
+
+        host.appendChild(dayWrap);
+      });
+    }
+
+    /** Save + Refresh **/
+    function saveAll() {
+      if (!CURRENT_PID) return;
+      const rows = Object.keys(CURRENT).map(sid => ({
+        person_id: CURRENT_PID, slot_id: sid, status: CURRENT[sid] || ''
+      }));
+      document.getElementById('status').textContent = 'Saving...';
+      google.script.run.withSuccessHandler((res) => {
+        document.getElementById('status').textContent = `✔ Saved (updated: ${res.updated}, inserted: ${res.inserted}) — refreshing…`;
+        refreshState(); // pull fresh counts + roster
+      }).withFailureHandler(err => {
+        document.getElementById('status').textContent = 'Error: ' + (err.message || err);
+      }).saveResponses(rows);
+    }
+    function refreshState() {
+      google.script.run.withSuccessHandler((st) => {
+        INIT.responsesByPerson = st.responsesByPerson;
+        COUNTS = st.countsBySlot || {};
+        ROSTER = st.rosterBySlot || {};
+        loadPersonGrid();
+        if (ACTIVE_SID) showRoster(ACTIVE_SID);
+        renderSchedule();
+        document.getElementById('status').textContent = 'Đã cập nhật.';
+      }).withFailureHandler(err => {
+        document.getElementById('status').textContent = 'Refresh failed: ' + (err.message || err);
+      }).getState();
+    }
+
+    /** Week navigation **/
+    function applyWeekModel(res){
+      INIT = res;
+      COUNTS = res.countsBySlot || {};
+      ROSTER = res.rosterBySlot || {};
+      document.getElementById('week').textContent = res.weekStart + ' (GMT+7)';
+      document.getElementById('weekRange').textContent = ' [' + res.weekRange.label + ']';
+      renderPeople();
+      renderGrid();
+      if (INIT.people.length) loadPersonGrid();
+      ACTIVE_SID = null;
+      document.getElementById('roster').style.display = 'none';
+      renderSchedule(); // build the weekly schedule list
+    }
+    function prevWeek(){
+      google.script.run.withSuccessHandler(applyWeekModel)
+        .withFailureHandler(e=>{ document.getElementById('status').textContent='Prev failed: '+(e.message||e); })
+        .changeWeek(-1);
+    }
+    function nextWeek(){
+      google.script.run.withSuccessHandler(applyWeekModel)
+        .withFailureHandler(e=>{ document.getElementById('status').textContent='Next failed: '+(e.message||e); })
+        .changeWeek(1);
+    }
+
+    document.getElementById('saveBtn').onclick = saveAll;
+    document.getElementById('refreshBtn').onclick = refreshState;
+    document.getElementById('prevBtn').onclick = prevWeek;
+    document.getElementById('nextBtn').onclick = nextWeek;
+
+    /** Bootstrap **/
+    (function init(){
+      google.script.run.withSuccessHandler(applyWeekModel)
+        .withFailureHandler(err => { document.getElementById('status').textContent = 'Init error: ' + (err.message || err); })
+        .getInitData();
+    })();
+  </script>
+</body>
+</html>
