@@ -1,15 +1,4 @@
-/** ===== Global config (single source of truth) ===== */
-const TABS = {
-  PEOPLE: 'PEOPLE',                // fixed roster
-  SLOTS: 'SLOTS',                  // slot_id | week_start | day | block
-  RESPONSES: 'RESPONSES',          // respond_id | person_id | slot_id | status | timestamp | week_start | date
-  SETTINGS: 'SETTINGS',            // A1: SelectedWeek, B1: <Monday date>
-  ARCHIVE: 'RESPONSES_Archive',    // same headers as RESPONSES
-};
-const SETTINGS_RANGE = 'B1';       // SelectedWeek (a Monday)
-const DAYS   = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-const BLOCKS = ['9-12','13-16','19-21'];
-const STATUS_VALUES = ['', 'Free', 'Class', 'x']; // cycle order & UI legend
+
 
 /** ===== Helpers (shared) ===== */
 function getSelectedWeek_() {
@@ -29,6 +18,8 @@ function onOpen() {
     .addItem('2) Lưu trữ & reset tuần hiện tại', 'archiveAndResetWeek')
     .addSeparator()
     .addItem('3) Nhảy sang tuần kế & tạo slot', 'goToNextWeekAndSeed')
+    .addSeparator()
+    .addItem('Kết sổ tuần → SUMMARY', 'settleWeekFromSettings')  // <-- NEW
     .addToUi();
 }
 

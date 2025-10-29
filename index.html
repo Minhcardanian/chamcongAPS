@@ -63,7 +63,7 @@
     .ctr{font-size:11px;color:#444}
     .tot{font-size:11px;border:1px solid #ccd3db;border-radius:10px;padding:1px 6px;background:#f7f9fc}
 
-    /* modal (for compact click) */
+    /* modal (for compact click & settle) */
     .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;z-index:999}
     .modal{background:#fff;border-radius:10px;min-width:60%;max-width:90%;padding:16px;border:1px solid #e5e7eb;box-shadow:0 10px 30px rgba(0,0,0,.18)}
     .modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
@@ -112,7 +112,18 @@
       <button id="btnFull" class="active">Đầy đủ</button>
       <button id="btnCompact">Rút gọn</button>
     </div>
+
+    <!-- Kết sổ period toggle + button (right side) -->
+    <div style="display:flex; gap:8px; align-items:center; margin-left:auto">
+      <div class="btnseg" id="periodSeg">
+        <button data-period="week"  class="active">Tuần</button>
+        <button data-period="month">Tháng</button>
+        <button data-period="term">Kỳ (6 tháng)</button>
+      </div>
+      <button id="btnSettle">Kết sổ</button>
+    </div>
   </div>
+
   <div id="schedule"></div>
   <div id="weeklyCompact" style="display:none"></div>
 
@@ -131,6 +142,17 @@
         <div style="margin:10px 0 6px"><b>x</b></div>
         <div id="mx"></div>
       </div>
+    </div>
+  </div>
+
+  <!-- modal for Kết sổ -->
+  <div id="settleModal" class="modal-backdrop">
+    <div class="modal" style="max-width: 900px">
+      <div class="modal-head">
+        <div id="settleTitle" style="font-weight:700"></div>
+        <button id="settleClose">Đóng</button>
+      </div>
+      <div id="settleBody"></div>
     </div>
   </div>
 
@@ -312,9 +334,7 @@
 
     /* === modal roster for compact === */
     function openRosterModal(sid, day, block){
-      // ensure the inline roster doesn't re-appear
       document.getElementById('roster').style.display='none';
-
       const r=ROSTER[sid]||{Free:[],Class:[],x:[]};
       const [iso]=sid.split('|');
       document.getElementById('mTitle').textContent=`${day} ${block} — ${nice(isoToDate(iso))}`;
@@ -332,7 +352,6 @@
 
       document.getElementById('modalWrap').style.display='flex';
     }
-
     document.getElementById('mClose').onclick=()=>{ document.getElementById('modalWrap').style.display='none'; };
 
     /* === save / refresh === */
@@ -352,10 +371,6 @@
         INIT.responsesByPerson=st.responsesByPerson;
         COUNTS=st.countsBySlot||{}; ROSTER=st.rosterBySlot||{};
         loadPersonGrid();
-        // keep inline roster only for grid interactions
-        if(ACTIVE_SID && document.getElementById('schedule').style.display!=='none'){
-          // no-op; inline roster shown only by grid click
-        }
         renderSchedule(); renderWeeklyCompact();
         document.getElementById('status').textContent='Đã cập nhật.';
       }).withFailureHandler(err=>{
@@ -392,13 +407,107 @@
       btnCompact.classList.add('active'); btnFull.classList.remove('active'); 
       document.getElementById('schedule').style.display='none'; 
       document.getElementById('weeklyCompact').style.display='block';
-      document.getElementById('roster').style.display='none'; // prevent the “middle cell” from reappearing
+      document.getElementById('roster').style.display='none';
     };
 
-    (function init(){
-      google.script.run.withSuccessHandler(applyWeekModel)
-        .withFailureHandler(err=>{ document.getElementById('status').textContent='Init error: '+(err.message||err); })
-        .getInitData();
+    /* ======= KẾT SỔ ======= */
+    (function(){
+      const seg = document.getElementById('periodSeg');
+      const btnSettle = document.getElementById('btnSettle');
+      const settleClose = document.getElementById('settleClose');
+      let PERIOD = 'week';
+
+      Array.from(seg.querySelectorAll('button')).forEach(btn=>{
+        btn.onclick = () => {
+          PERIOD = btn.dataset.period;
+          Array.from(seg.querySelectorAll('button')).forEach(b=>b.classList.remove('active'));
+          btn.classList.add('active');
+        };
+      });
+
+      function periodRange(period){
+        const d = isoToDate(INIT.weekStart); // Monday of selected week
+        const pad = n => (n<10? '0'+n : ''+n);
+        const iso = dt => `${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())}`;
+
+        if (period === 'week') {
+          const start = new Date(d);
+          const end   = new Date(d); end.setDate(end.getDate()+6);
+          return {start: iso(start), end: iso(end), label:`Tuần ${iso(start)} → ${iso(end)}`};
+        }
+        if (period === 'month') {
+          const start = new Date(d.getFullYear(), d.getMonth(), 1);
+          const end   = new Date(d.getFullYear(), d.getMonth()+1, 0);
+          return {start: iso(start), end: iso(end), label:`Tháng ${d.getMonth()+1}/${d.getFullYear()}`};
+        }
+        // term = 6-month half year
+        const m = d.getMonth();
+        const isH1 = (m < 6);
+        const start = new Date(d.getFullYear(), isH1 ? 0 : 6, 1);
+        const end   = new Date(d.getFullYear(), isH1 ? 6 : 12, 0);
+        return {start: iso(start), end: iso(end), label:`Kỳ ${isH1?'1':'2'} / ${d.getFullYear()}`};
+      }
+
+      function renderSettle(res){
+        const box = document.getElementById('settleBody');
+        box.innerHTML = '';
+        const title = document.getElementById('settleTitle');
+        title.textContent = `Kết sổ — ${res.range.label}`;
+
+        const tbl = document.createElement('table');
+        tbl.style.width = '100%';
+        tbl.style.borderCollapse = 'collapse';
+        tbl.innerHTML = `
+          <thead>
+            <tr>
+              <th style="text-align:left;border-bottom:1px solid #ddd;padding:8px">Người</th>
+              <th style="border-bottom:1px solid #ddd;padding:8px">x</th>
+              <th style="border-bottom:1px solid #ddd;padding:8px">Passed</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        `;
+        const tb = tbl.querySelector('tbody');
+
+        (res.rows || []).forEach(r=>{
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td style="padding:8px;border-bottom:1px solid #eee;text-align:left">${r.name ? `${r.name} (${r.pid})` : r.pid}</td>
+            <td style="padding:8px;border-bottom:1px solid #eee;text-align:center">${r.x||0}</td>
+            <td style="padding:8px;border-bottom:1px solid #eee;text-align:center">${r.passed ? '✅' : '❌'}</td>
+          `;
+          tb.appendChild(tr);
+        });
+
+        if (!res.rows || !res.rows.length){
+          const empty = document.createElement('div');
+          empty.className = 'muted';
+          empty.textContent = 'Không có dữ liệu trong khoảng thời gian đã chọn.';
+          box.appendChild(empty);
+        } else {
+          box.appendChild(tbl);
+        }
+
+        document.getElementById('settleModal').style.display = 'flex';
+      }
+
+      btnSettle.onclick = () => {
+        if (!INIT) return;
+        const r = periodRange(PERIOD);
+        const args = { type: PERIOD, start: r.start, end: r.end };
+        document.getElementById('status').textContent = 'Đang kết sổ…';
+        google.script.run
+          .withSuccessHandler(res => {
+            document.getElementById('status').textContent = '';
+            renderSettle(res);
+          })
+          .withFailureHandler(err => {
+            document.getElementById('status').textContent = 'Kết sổ lỗi: ' + (err.message || err);
+          })
+          .settlePeriod(args);
+      };
+
+      settleClose.onclick = () => { document.getElementById('settleModal').style.display='none'; };
     })();
   </script>
 </body>
