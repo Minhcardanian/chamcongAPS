@@ -1,514 +1,412 @@
-<!doctype html>
-<html>
+<!DOCTYPE html>
+<html lang="en" data-app-version="v-2025-11-04-mobile">
 <head>
-  <meta charset="utf-8">
-  <title>Chấm công</title>
+  <meta charset="utf-8" />
+  <title>ChamCong / Shift Registration</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <!-- Cache bust -->
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+
   <style>
-    body{font-family:system-ui,Arial,sans-serif;margin:16px}
-    .row{margin:10px 0;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-    select,button{padding:6px 10px}
-    .legend span{display:inline-block;padding:2px 8px;border-radius:10px;border:1px solid #ddd;margin-right:6px}
-    .pill{border-radius:10px;padding:0 8px;font-size:12px;border:1px solid #ddd;background:#f8f8f8}
-    table{border-collapse:collapse;width:100%;margin-top:10px}
-    th,td{border:1px solid #ddd;text-align:center;padding:8px;vertical-align:middle}
-    th{background:#f6f6f6;position:sticky;top:0}
-    td.slot{cursor:pointer;user-select:none;min-width:72px}
-    .Free{background:#e6ffe6}
-    .Class{background:#fff6d6}
-    .x{background:#ffe6e6}
-    .muted{color:#666;margin-left:8px}
-    .gridwrap{overflow-x:auto}
-    .counts{font-size:12px;color:#444;margin-top:6px}
-    .note{font-size:12px;color:#666}
+    :root{
+      --bg:#f6f7fb; --panel:#ffffff; --muted:#6b7280; --txt:#0f172a;
+      --green:#16a34a; --red:#dc2626; --yellow:#eab308; --gray:#9ca3af; --border:#e5e7eb;
+      --card:#fafafa; --btn:#0f172a; --btnh:#111827; --btn-txt:#ffffff; --accent:#4f46e5;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;background:var(--bg);color:var(--txt);font:14px system-ui, Segoe UI, Roboto, Arial, sans-serif;}
 
-    /* roster (inline under grid — for GRID only) */
-    #roster{margin-top:14px;border:1px solid #ddd;border-radius:8px;padding:10px;background:#fafafa}
-    #roster h4{margin:0 0 8px 0}
-    .col{min-width:200px}
-    .tag{display:inline-block;padding:2px 6px;border-radius:8px;border:1px solid #ddd;margin:2px 4px 2px 0;background:#fff}
+    .shell{min-height:100%; display:flex; align-items:center; justify-content:center; padding:24px;}
+    .app{display:none;}
+    .authed .shell{display:block; padding:16px;}
+    .authed .app{display:grid; grid-template-columns: 360px 1fr; gap:16px; align-items:start}
 
-    /* weekly (full) */
-    #schedule{margin-top:16px}
-    .daywrap{margin-top:12px}
-    .daytitle{font-weight:700;margin:6px 0}
-    .slotcard{border:1px solid #e5e5e5;border-radius:10px;padding:10px;background:#fff;margin:8px 0;display:flex;gap:16px;align-items:flex-start;justify-content:space-between}
-    .slot-left{min-width:140px}
-    .slot-title{font-weight:600}
-    .group{min-width:240px}
-    .group h5{margin:0 0 6px 0;font-size:14px}
-    .names{display:flex;flex-wrap:wrap;gap:6px}
-    .chip{border:1px solid #ddd;border-radius:14px;padding:3px 8px;background:#f9f9f9;font-size:12px}
-    .more{font-size:12px;color:#246;cursor:pointer;user-select:none}
-    .empty{color:#999;font-size:12px}
-    .slotcard.Free{background:#fbfffb}
-    .slotcard.Class{background:#fffdf5}
-    .slotcard.x{background:#fff8f8}
+    .card{background:var(--panel); border:1px solid var(--border); border-radius:16px; padding:16px; box-shadow:0 6px 24px rgba(15,23,42,.06);}
+    h2,h3{margin:0 0 12px 0}
+    .muted{color:var(--muted)}
+    label{display:block;margin:8px 0 6px 0;font-weight:600}
+    input,select,button{border:1px solid var(--border); color:var(--txt); border-radius:10px; padding:12px 14px; width:100%; font-size:14px; background:#fff;}
+    button{background:var(--btn); color:var(--btn-txt); cursor:pointer; font-weight:700;}
+    button:hover{background:var(--btnh)}
+    button[disabled]{opacity:.6; cursor:not-allowed}
+    .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 
-    /* weekly toolbar */
-    .wkbar{display:flex;gap:8px;align-items:center;margin-top:14px}
-    .btnseg{border:1px solid #d0d7de;border-radius:8px;overflow:hidden}
-    .btnseg button{border:none;background:#fff;padding:6px 10px}
-    .btnseg button.active{background:#eef4ff}
+    /* Table */
+    .grid{overflow:auto;border:1px solid var(--border);border-radius:12px;background:#fff}
+    .grid{ -webkit-overflow-scrolling: touch; }
+    table{border-collapse:separate;border-spacing:0;width:100%;min-width:820px}
+    th,td{padding:10px 12px;border-bottom:1px solid var(--border);border-right:1px solid var(--border)}
+    th:first-child, td:first-child{position:sticky;left:0;background:#fff;z-index:2}
+    thead th{position:sticky;top:0;background:#fff;z-index:3}
+    td.cell{cursor:pointer;text-align:center;font-weight:600;border-left:1px solid var(--border);height:44px}
+    td.cell.disabled{cursor:not-allowed; opacity:.7}
 
-    /* weekly compact list */
-    #weeklyCompact{margin-top:8px;border:1px solid #e5e7eb;border-radius:10px}
-    .crow{display:grid;grid-template-columns:120px repeat(3,1fr);gap:6px;padding:8px;border-top:1px solid #f0f0f0;align-items:center}
-    .crow:first-child{border-top:none}
-    .cday{font-weight:600}
-    .cslot{display:flex;gap:8px;align-items:center}
-    .chipmini{border:1px solid #dfe2e7;border-radius:10px;padding:3px 8px;font-size:12px;background:#fff;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
-    .chipmini.Free{background:#eefeef}
-    .chipmini.Class{background:#fff8e5}
-    .chipmini.x{background:#ffecec}
-    .ctr{font-size:11px;color:#444}
-    .tot{font-size:11px;border:1px solid #ccd3db;border-radius:10px;padding:1px 6px;background:#f7f9fc}
+    .legend{display:flex;gap:10px;flex-wrap:wrap}
+    .dot{width:12px;height:12px;border-radius:50%;display:inline-block;margin-right:6px}
+    .pill{display:inline-flex;gap:6px;align-items:center;background:var(--card);border:1px solid var(--border);padding:6px 10px;border-radius:999px}
+    .rightpane{display:grid;gap:12px}
+    .toolbar{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap}
+    .note{font-size:12px;color:var(--muted)}
+    .foot{font-size:12px;color:var(--muted);margin-top:8px}
+    .login-card{width:100%; max-width:520px;}
+    .error{color:#b91c1c; font-weight:600; margin-top:8px}
+    .status{color:#475569; margin-top:8px}
 
-    /* modal (for compact click & settle) */
-    .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;z-index:999}
-    .modal{background:#fff;border-radius:10px;min-width:60%;max-width:90%;padding:16px;border:1px solid #e5e7eb;box-shadow:0 10px 30px rgba(0,0,0,.18)}
-    .modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
-    .modal .tag{display:inline-block;padding:5px 10px;border-radius:12px;border:1px solid #e1e5ea;background:#fff;margin:4px 6px 0 0}
+    /* Sticky save bar inside the matrix card */
+    .savebar{display:none; gap:8px; margin-top:8px; position:sticky; top:0; z-index:5;
+      justify-content:flex-end; padding:8px; background:#ffffffcc; backdrop-filter:saturate(1.2) blur(2px);
+      border:1px solid var(--border); border-radius:10px;}
+    .savebar.show{display:flex;}
+    .chip{background:#EEF2FF; color:#3730A3; border:1px solid #C7D2FE; padding:4px 8px; border-radius:999px; font-weight:700; font-size:12px;}
+
+    /* Picker */
+    .picker{position:fixed; z-index:9999; background:#fff; border:1px solid var(--border);
+      border-radius:12px; box-shadow:0 12px 28px rgba(15,23,42,.18); padding:10px; display:none;}
+    .picker .opt{display:inline-block; padding:8px 12px; margin:4px; border-radius:999px; border:1px solid var(--border);
+      background:#fff; cursor:pointer; font-weight:700; font-size:13px;}
+
+    /* MOBILE */
+    @media (max-width: 880px){
+      body{font-size:16px;}
+      .authed .app{grid-template-columns:1fr; gap:12px}
+      .card{padding:12px; border-radius:12px;}
+      .toolbar{gap:6px}
+      table{min-width:640px}
+      th,td{padding:8px 10px}
+      td.cell{height:48px}
+      .pill{padding:4px 8px}
+      .legend{gap:6px}
+      .savebar{top: env(safe-area-inset-top, 0px);}
+      .foot{font-size:11px}
+    }
   </style>
 </head>
 <body>
-  <!-- top bar -->
-  <div class="row">
-    <button id="prevBtn">◀︎</button>
-    <div><b>Tuần:</b> <span id="week"></span> <span class="muted" id="weekRange"></span></div>
-    <div class="legend">
-      <span class="Free">Free</span>
-      <span class="Class">Class</span>
-      <span class="x">x</span>
-      <span class="pill">Số người / slot hiển thị ở góc</span>
-    </div>
-    <button id="nextBtn">▶︎</button>
-  </div>
+  <!-- Login -->
+  <div class="shell" id="shell">
+    <div class="card login-card">
+      <h2>Shift Registration</h2>
 
-  <div class="row">
-    <label><b>Người:</b></label>
-    <select id="person"></select>
-    <button id="saveBtn">Lưu</button>
-    <button id="refreshBtn">Làm mới</button>
-    <span id="status" class="muted"></span>
-  </div>
-
-  <!-- grid -->
-  <div class="gridwrap" id="grid"></div>
-
-  <!-- roster (GRID only) -->
-  <div id="roster" style="display:none">
-    <h4 id="rosterTitle">Lịch trong ô</h4>
-    <div style="display:flex;gap:20px;flex-wrap:wrap">
-      <div class="col"><b>Free</b><div id="rFree"></div></div>
-      <div class="col"><b>Class</b><div id="rClass"></div></div>
-      <div class="col"><b>x</b><div id="rx"></div></div>
-    </div>
-  </div>
-
-  <!-- weekly toolbar + boards -->
-  <div class="wkbar">
-    <h3 style="margin:0">Lịch đăng ký theo tuần</h3>
-    <div class="btnseg">
-      <button id="btnFull" class="active">Đầy đủ</button>
-      <button id="btnCompact">Rút gọn</button>
-    </div>
-
-    <!-- Kết sổ period toggle + button (right side) -->
-    <div style="display:flex; gap:8px; align-items:center; margin-left:auto">
-      <div class="btnseg" id="periodSeg">
-        <button data-period="week"  class="active">Tuần</button>
-        <button data-period="month">Tháng</button>
-        <button data-period="term">Kỳ (6 tháng)</button>
+      <div id="classicLogin">
+        <label>User ID (your <em>pname</em>)</label>
+        <input id="uid" type="text" autocomplete="off" placeholder="e.g., Bùi Quang Minh"/>
+        <label>Password (your <em>person_id</em>)</label>
+        <input id="pwd" type="password" autocomplete="new-password" placeholder="Enter your person_id"/>
+        <button id="loginBtn" type="button" style="margin-top:10px" onclick="login()">Sign in</button>
+        <div id="loginMsg" class="status" aria-live="polite"></div>
       </div>
-      <button id="btnSettle">Kết sổ</button>
-    </div>
-  </div>
 
-  <div id="schedule"></div>
-  <div id="weeklyCompact" style="display:none"></div>
+      <div style="text-align:center; margin:10px 0; color:#94a3b8">— or —</div>
 
-  <!-- modal for compact view -->
-  <div id="modalWrap" class="modal-backdrop">
-    <div class="modal">
-      <div class="modal-head">
-        <div id="mTitle" style="font-weight:700"></div>
-        <button id="mClose">Đóng</button>
-      </div>
-      <div>
-        <div style="margin:6px 0"><b>Free</b></div>
-        <div id="mFree"></div>
-        <div style="margin:10px 0 6px"><b>Class</b></div>
-        <div id="mClass"></div>
-        <div style="margin:10px 0 6px"><b>x</b></div>
-        <div id="mx"></div>
+      <div style="text-align:center">
+        <button type="button" onclick="loginWithGoogle()" style="background:#fff;color:#111827;border:1px solid var(--border)">
+          Sign in with Google (student.vgu.edu.vn)
+        </button>
       </div>
     </div>
   </div>
 
-  <!-- modal for Kết sổ -->
-  <div id="settleModal" class="modal-backdrop">
-    <div class="modal" style="max-width: 900px">
-      <div class="modal-head">
-        <div id="settleTitle" style="font-weight:700"></div>
-        <button id="settleClose">Đóng</button>
+  <!-- App -->
+  <div class="app" id="app" style="display:none">
+    <div class="card">
+      <h3>Controls</h3>
+      <div style="display:grid;grid-template-columns:max-content 1fr;gap:8px;margin-top:8px">
+        <div>Signed in:</div><div id="who"></div>
+        <div>Role:</div><div id="role"></div>
       </div>
-      <div id="settleBody"></div>
+      <div class="row" style="margin-top:8px">
+        <button type="button" onclick="logout()" style="background:#fff;color:#111827;border:1px solid var(--border)">Logout</button>
+      </div>
+      <hr/>
+      <div class="toolbar">
+        <div>
+          <label>Week starting (Mon)</label>
+          <input id="weekStart" type="date" />
+        </div>
+        <button type="button" onclick="loadWeek()">Load Week</button>
+      </div>
+      <div style="margin:10px 0">
+        <div class="legend">
+          <span class="pill"><i class="dot" style="background:var(--green)"></i>REGISTERED</span>
+          <span class="pill"><i class="dot" style="background:var(--red)"></i>BUSY</span>
+          <span class="pill"><i class="dot" style="background:var(--yellow)"></i>BUSY + IN-ROOM</span>
+          <span class="pill"><i class="dot" style="background:var(--gray)"></i>BLANK</span>
+        </div>
+      </div>
+      <div id="adminBar" style="display:none;margin-top:8px">
+        <div class="pill" style="gap:10px">
+          <input id="adminOverride" type="checkbox" onchange="toggleAdminEdit(this.checked)" />
+          <label for="adminOverride" style="margin:0">Admin Edit Mode (ignores deadline & lets everyone edit)</label>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <button type="button" onclick="sendMonthly()">Send Monthly Reminders</button>
+        </div>
+      </div>
+      <p class="foot">Deadline: Registration for <b>next week</b> closes at <b>Sunday 23:59</b> (local). After that, members can view but cannot modify. Turn on Admin Edit Mode to let everyone edit and ignore the deadline.</p>
+    </div>
+
+    <div class="rightpane">
+      <div class="card">
+        <div class="row" style="justify-content:space-between;align-items:center">
+          <h3>Weekly Matrix</h3>
+          <div class="savebar" id="savebar">
+            <span class="chip" id="dirtyCount">0 pending</span>
+            <button id="saveBtn" type="button" onclick="saveAll()" disabled>Save changes</button>
+            <button type="button" onclick="discardAll()">Discard</button>
+          </div>
+        </div>
+
+        <div id="grid" class="grid"></div>
+
+        <p class="note">
+          Y-axis: Names. X-axis: Days. Click to cycle (BLANK → REGISTERED → BUSY → BLANK).
+          BUSY opens a subtype picker. When Admin Edit Mode is ON, everyone can edit.
+        </p>
+      </div>
     </div>
   </div>
 
-  <div class="note">Nhấn vào ô để đổi: Trống → Free → Class → x → Trống. Sau khi Lưu, tổng số người và danh sách theo ô sẽ cập nhật.</div>
+  <!-- BUSY subtype picker -->
+  <div id="picker" class="picker" onclick="event.stopPropagation()">
+    <div>
+      <span class="opt" data-sub="EXAM">EXAM</span>
+      <span class="opt" data-sub="HOME">HOME</span>
+      <span class="opt" data-sub="SICK">SICK</span>
+      <span class="opt" data-sub="IN-ROOM">IN-ROOM</span>
+      <span class="opt" data-sub="OTHER">OTHER</span>
+    </div>
+  </div>
 
-  <script>
-    /* === state === */
-    let INIT=null, CURRENT_PID=null, CURRENT={}, COUNTS={}, ROSTER={}, ACTIVE_SID=null;
+<script>
+let SESSION=null;
+let CURRENT={days:[],users:[],data:{},colors:{},weekStartISO:null};
+let STAGED={};
+let PICKER_CTX=null;
 
-    /* === helpers === */
-    const cycle=(v,arr)=>arr[(arr.indexOf(v)+1)%arr.length];
-    const fmt=(c)=>`F:${c.Free||0} | C:${c.Class||0} | x:${c.x||0}`;
-    const isoToDate=s=>{const [y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d)};
-    const nice=d=>d.toLocaleDateString(undefined,{day:'2-digit',month:'2-digit'});
+function keyFor(u,d){return `${u}__${d}`;}
+function updateSavebar(){
+  const n=Object.keys(STAGED).length;
+  document.getElementById('dirtyCount').textContent = `${n} pending`;
+  document.getElementById('saveBtn').disabled = n===0;
+  document.getElementById('savebar').classList.toggle('show', n>0);
+}
 
-    /* === people === */
-    function renderPeople(){
-      const sel=document.getElementById('person');
-      if(!INIT.people.length){ sel.innerHTML=`<option>(Không có dữ liệu PEOPLE)</option>`; sel.disabled=true; return; }
-      sel.disabled=false;
-      sel.innerHTML=INIT.people.map(p=>`<option value="${p.person_id}">${p.pname} (${p.person_id})</option>`).join('');
-      CURRENT_PID=sel.value;
-      sel.onchange=()=>{ CURRENT_PID=sel.value; loadPersonGrid(); };
-    }
+/* -------- Login UI state -------- */
+function setLoginState(isLoading,msg,isError){
+  const btn=document.getElementById('loginBtn');
+  const box=document.getElementById('loginMsg');
+  btn.disabled=!!isLoading;
+  btn.textContent=isLoading?'Signing in…':'Sign in';
+  btn.setAttribute('aria-busy', isLoading ? 'true' : 'false');
+  box.textContent=msg || (isLoading?'Logging in…':'');
+  box.className=isError?'error':'status';
+}
 
-    /* === grid === */
-    function paintCell(td,my,counts){
-      td.querySelector('.mine').textContent=my||'';
-      td.className=`slot ${my||''}`;
-      td.querySelector('.counts').textContent=fmt(counts);
-    }
-    function renderGrid(){
-      const {days,blocks,weekStart}=INIT;
-      const table=document.createElement('table');
-      const thead=document.createElement('thead');
-      thead.innerHTML=`<tr><th>Block \\ Day</th>${days.map(d=>`<th>${d}</th>`).join('')}</tr>`;
-      table.appendChild(thead);
-      const tbody=document.createElement('tbody');
+/* -------- Classic login -------- */
+function login(){
+  const user_key=document.getElementById('uid').value.trim();
+  const password=document.getElementById('pwd').value;
+  if(!user_key||!password){ setLoginState(false,'Please enter both User ID and Password.',true); return; }
+  setLoginState(true,'Logging in…',false);
 
-      blocks.forEach(b=>{
-        const tr=document.createElement('tr');
-        tr.innerHTML=`<th>${b}</th>`+days.map(d=>{
-          const sid=`${weekStart}|${d}|${b}`;
-          const c=COUNTS[sid]||{Free:0,Class:0,x:0,total:0};
-          return `<td class="slot" data-sid="${sid}">
-                    <div class="mine"></div>
-                    <div class="counts">${fmt(c)}</div>
-                  </td>`;
-        }).join('');
-        tbody.appendChild(tr);
-      });
-      table.appendChild(tbody);
-      const wrap=document.getElementById('grid');
-      wrap.innerHTML=''; wrap.appendChild(table);
+  google.script.run
+    .withSuccessHandler(res=>{
+      if(!res||!res.ok){ setLoginState(false,(res&&res.error)||'Login failed',true); return; }
+      finishLogin(res.data);
+    })
+    .withFailureHandler(()=> setLoginState(false,'INVALID CREDENTIALS',true))
+    .route({action:'login', user_key, password});
+}
 
-      // GRID click -> toggle & show INLINE roster under grid
-      wrap.querySelectorAll('td.slot').forEach(td=>{
-        td.onclick=()=>{
-          const sid=td.dataset.sid;
-          ACTIVE_SID=sid;
-          const next=cycle(CURRENT[sid]||'',INIT.statuses);
-          CURRENT[sid]=next;
-          paintCell(td,next,COUNTS[sid]||{});
-          showRosterInline(sid);   // only for grid
-        };
-      });
-    }
-    function loadPersonGrid(){
-      CURRENT=Object.assign({},(INIT.responsesByPerson[CURRENT_PID]||{}));
-      document.querySelectorAll('td.slot').forEach(td=>{
-        const sid=td.dataset.sid;
-        paintCell(td,CURRENT[sid]||'',COUNTS[sid]||{});
-      });
-      document.getElementById('status').textContent='';
-    }
+/* -------- Google login -------- */
+function loginWithGoogle(){
+  const btn = event?.target;
+  if (btn) { btn.disabled = true; btn.textContent = 'Signing in…'; }
+  google.script.run
+    .withSuccessHandler(res=>{
+      if (btn) { btn.disabled = false; btn.textContent = 'Sign in with Google (student.vgu.edu.vn)'; }
+      if(!res||!res.ok){ alert((res&&res.error)||'Google sign-in failed'); return; }
+      finishLogin(res.data);
+    })
+    .withFailureHandler(()=>{
+      if (btn) { btn.disabled = false; btn.textContent = 'Sign in with Google (student.vgu.edu.vn)'; }
+      alert('Google sign-in failed');
+    })
+    .route({action:'loginWithGoogle'});
+}
 
-    /* === roster (inline for GRID) === */
-    function showRosterInline(sid){
-      const r=ROSTER[sid]||{Free:[],Class:[],x:[]};
-      const [iso,day,block]=sid.split('|');
-      const title=`${day} ${block} — ${nice(isoToDate(iso))}`;
-      document.getElementById('rosterTitle').textContent=title;
-      const put=(id,arr)=>{
-        const el=document.getElementById(id); el.innerHTML='';
-        if(!arr.length){ el.innerHTML='<span class="muted">—</span>'; return; }
-        arr.forEach(p=>{
-          const tag=document.createElement('span'); tag.className='tag';
-          tag.textContent=p.name ? `${p.name} (${p.pid})` : p.pid;
-          el.appendChild(tag);
-        });
-      };
-      put('rFree',r.Free||[]); put('rClass',r.Class||[]); put('rx',r.x||[]);
-      document.getElementById('roster').style.display='block';
-    }
+function finishLogin(d){
+  SESSION={user:d.user,is_admin:d.is_admin,admin_edit_override:!!d.admin_edit_override};
+  document.body.classList.add('authed');
+  document.getElementById('shell').style.display='none';
+  document.getElementById('app').style.display='';
+  document.getElementById('who').textContent = `${d.user.name} (${d.user.user_id})`;
+  document.getElementById('role').textContent = d.is_admin ? 'Admin' : 'Member';
+  if(d.is_admin){ document.getElementById('adminBar').style.display=''; document.getElementById('adminOverride').checked=!!d.admin_edit_override; }
+  const today=new Date(); const monday=new Date(today.getFullYear(),today.getMonth(),today.getDate());
+  const dow=monday.getDay(); monday.setDate(monday.getDate()+(dow===0?-6:1-dow));
+  document.getElementById('weekStart').value=monday.toISOString().slice(0,10);
+  loadWeek();
+}
 
-    /* === weekly (full) === */
-    function renderSchedule(){
-      const host=document.getElementById('schedule'); host.innerHTML='';
-      const {days,blocks,weekStart}=INIT;
+/* -------- Logout -------- */
+function logout(){
+  SESSION=null; STAGED={};
+  document.getElementById('app').style.display='none';
+  document.getElementById('shell').style.display='';
+  document.body.classList.remove('authed');
+  setLoginState(false,'',false);
+  document.getElementById('uid').value='';
+  document.getElementById('pwd').value='';
+}
 
-      days.forEach(day=>{
-        const dayWrap=document.createElement('div'); dayWrap.className='daywrap';
-        dayWrap.innerHTML=`<div class="daytitle">${day}</div>`;
-        blocks.forEach(block=>{
-          const sid=`${weekStart}|${day}|${block}`;
-          const roster=ROSTER[sid]||{Free:[],Class:[],x:[]};
-          const card=document.createElement('div'); card.className='slotcard';
-          let top='Free',n=0; ['Free','Class','x'].forEach(k=>{const m=(roster[k]||[]).length; if(m>n){n=m;top=k;}});
-          card.classList.add(top);
+/* -------- Load week -------- */
+function setGridLoading(on){
+  document.getElementById('grid').innerHTML = on?'<div class="muted" style="padding:12px">Loading table…</div>':'';
+}
+function loadWeek(){
+  STAGED={}; updateSavebar();
+  const weekStartISO=document.getElementById('weekStart').value;
+  setGridLoading(true);
+  google.script.run.withSuccessHandler(res=>{
+    setGridLoading(false);
+    if(!res.ok){ document.getElementById('grid').innerHTML=`<div class="error" style="padding:12px">${res.error||'Failed to load'}</div>`; return; }
+    CURRENT=res.data; renderGrid();
+  }).route({action:'getWeek', weekStartISO});
+}
 
-          const left=document.createElement('div'); left.className='slot-left';
-          left.innerHTML=`<div class="slot-title">${block}</div><div class="muted">${sid.split('|')[0]}</div>`;
-          card.appendChild(left);
+/* -------- Grid render & interaction -------- */
+function colorFor(status, subtype){
+  status=(status||'').toUpperCase(); subtype=(subtype||'').toUpperCase();
+  if(status==='REGISTERED') return 'var(--green)';
+  if(status==='BUSY'&&subtype==='IN-ROOM') return 'var(--yellow)';
+  if(status==='BUSY') return 'var(--red)';
+  return 'var(--gray)';
+}
+function labelFor(status, subtype){
+  status=(status||'').toUpperCase(); subtype=(subtype||'').toUpperCase();
+  if(status==='OTHER'&&!subtype) return 'BLANK';
+  if(status==='BUSY'&&subtype) return `BUSY (${subtype})`;
+  return status||'BLANK';
+}
+function renderGrid(){
+  const g=document.getElementById('grid');
+  if(!CURRENT.days.length){ g.innerHTML='<div class="muted" style="padding:12px">No data</div>'; return; }
 
-          const group=(label,arr)=>{
-            const col=document.createElement('div'); col.className='group';
-            col.innerHTML=`<h5>${label}</h5><div class="names"></div>`;
-            const names=col.querySelector('.names');
-            const MAX=5;
-            const paint=(limit)=>{
-              names.innerHTML='';
-              if(!arr||!arr.length){ names.innerHTML='<span class="empty">—</span>'; return; }
-              arr.slice(0,limit).forEach(p=>{
-                const chip=document.createElement('span'); chip.className='chip';
-                chip.textContent=p.name ? `${p.name} (${p.pid})` : p.pid;
-                names.appendChild(chip);
-              });
-            };
-            paint(MAX);
-            if(arr&&arr.length>MAX){
-              const more=document.createElement('span'); more.className='more';
-              let open=false; const rest=arr.length-MAX;
-              more.textContent=`+${rest} xem thêm`;
-              more.onclick=()=>{ open=!open; paint(open?arr.length:MAX); more.textContent=open?'Ẩn bớt':`+${rest} xem thêm`; };
-              col.appendChild(more);
-            }
-            return col;
-          };
+  let html='<table><thead><tr><th>Name</th>';
+  CURRENT.days.forEach(d=> html+=`<th>${d}</th>`);
+  html+='</tr></thead><tbody>';
 
-          card.appendChild(group('Free',roster.Free||[]));
-          card.appendChild(group('Class',roster.Class||[]));
-          card.appendChild(group('x',roster.x||[]));
-          dayWrap.appendChild(card);
-        });
-        host.appendChild(dayWrap);
-      });
-    }
+  CURRENT.users.forEach(u=>{
+    const isMine=SESSION?.user?.user_id===u.user_id;
+    const everyoneCanEdit = document.getElementById('adminOverride').checked;
+    html+=`<tr data-uid="${u.user_id}"><td><b>${u.name}</b></td>`;
+    CURRENT.days.forEach(d=>{
+      const k=keyFor(u.user_id,d);
+      const stage=STAGED[k];
+      const base=(CURRENT.data[u.user_id]||{})[d]||{status:'OTHER',subtype:''};
+      const cell=stage||base;
+      const bg=colorFor(cell.status,cell.subtype);
+      const label=labelFor(cell.status,cell.subtype);
+      const disabled = !(SESSION?.is_admin || isMine || everyoneCanEdit);
+      const cls=disabled?'cell disabled':'cell';
+      const handler=disabled?'':`onclick="onCellClick(event,'${u.user_id}','${d}')"`; 
+      html+=`<td class="${cls}" style="background:${bg}" ${handler}>${label}</td>`;
+    });
+    html+='</tr>';
+  });
 
-    /* === weekly (compact) === */
-    function renderWeeklyCompact(){
-      const box=document.getElementById('weeklyCompact'); box.innerHTML='';
-      const {days,blocks,weekStart}=INIT;
+  html+='</tbody></table>';
+  g.innerHTML=html;
+}
 
-      days.forEach(day=>{
-        const row=document.createElement('div'); row.className='crow';
-        row.innerHTML=`<div class="cday">${day}</div>`;
-        blocks.forEach(block=>{
-          const sid=`${weekStart}|${day}|${block}`;
-          const c=COUNTS[sid]||{Free:0,Class:0,x:0};
-          const most = (c.Free>=c.Class && c.Free>=c.x) ? 'Free' : (c.Class>=c.x ? 'Class' : 'x');
-          const total=(c.Free||0)+(c.Class||0)+(c.x||0);
+/* -------- Click cycle: BLANK → REGISTERED → BUSY → BLANK -------- */
+function onCellClick(ev, user_id, dateISO) {
+  ev.stopPropagation();
+  hidePicker();
 
-          const cell=document.createElement('div'); cell.className='cslot';
+  const k = keyFor(user_id, dateISO);
+  const base  = (CURRENT.data[user_id] || {})[dateISO] || {status:'OTHER', subtype:''};
+  const cur   = STAGED[k] || base;
+  const s = (cur.status || '').toUpperCase();
 
-          const chip=document.createElement('span'); chip.className=`chipmini ${most}`;
-          chip.innerHTML=`${block} <span class="tot">${total}</span>`;
-          chip.title=`${day} ${block}`;
-          chip.onclick=()=>openRosterModal(sid, day, block);
+  if (s === 'OTHER') {
+    STAGED[k] = { target_user_id:user_id, dateISO, status:'REGISTERED', subtype:'' };
+    renderGrid(); updateSavebar();
+  } else if (s === 'REGISTERED') {
+    PICKER_CTX = { user_id, dateISO };
+    openPicker(ev.clientX, ev.clientY);
+  } else { // BUSY of any subtype → BLANK
+    STAGED[k] = { target_user_id:user_id, dateISO, status:'OTHER', subtype:'' };
+    renderGrid(); updateSavebar();
+  }
+}
 
-          const ctr=document.createElement('span'); ctr.className='ctr';
-          ctr.textContent=`F:${c.Free||0} C:${c.Class||0} x:${c.x||0}`;
+/* Picker (for BUSY subtypes) with viewport clamping */
+function openPicker(x,y){
+  const p=document.getElementById('picker');
+  const pad=8, w=220, h=p.offsetHeight||140;
+  let left = x + pad, top = y + pad;
+  const vw = window.innerWidth, vh = window.innerHeight;
+  if (left + w > vw - pad) left = vw - w - pad;
+  if (top + h > vh - pad) top = vh - h - pad;
+  p.style.display='block'; p.style.left=left+'px'; p.style.top=top+'px';
+}
+function hidePicker(){document.getElementById('picker').style.display='none'; PICKER_CTX=null;}
+document.addEventListener('click', hidePicker);
+document.querySelectorAll('#picker .opt').forEach(el=>{
+  el.addEventListener('click', ()=>{
+    if(!PICKER_CTX) return;
+    const subtype=el.getAttribute('data-sub'); const {user_id,dateISO}=PICKER_CTX;
+    const k=keyFor(user_id,dateISO);
+    STAGED[k]={target_user_id:user_id,dateISO,status:'BUSY',subtype};
+    hidePicker(); renderGrid(); updateSavebar();
+  });
+});
 
-          cell.appendChild(chip); cell.appendChild(ctr);
-          row.appendChild(cell);
-        });
-        box.appendChild(row);
-      });
-    }
+/* Save / Discard */
+function saveAll(){
+  const changes=Object.values(STAGED);
+  if(!changes.length) return;
+  const btn=document.getElementById('saveBtn');
+  btn.disabled=true; btn.textContent='Saving…';
+  const actor_id=SESSION?.user?.user_id;
 
-    /* === modal roster for compact === */
-    function openRosterModal(sid, day, block){
-      document.getElementById('roster').style.display='none';
-      const r=ROSTER[sid]||{Free:[],Class:[],x:[]};
-      const [iso]=sid.split('|');
-      document.getElementById('mTitle').textContent=`${day} ${block} — ${nice(isoToDate(iso))}`;
+  google.script.run.withSuccessHandler(res=>{
+    btn.textContent='Save changes';
+    if(!res.ok){ alert(res.error||'Save failed'); btn.disabled=false; return; }
+    changes.forEach(c=>{
+      CURRENT.data[c.target_user_id]=CURRENT.data[c.target_user_id]||{};
+      CURRENT.data[c.target_user_id][c.dateISO]={status:c.status, subtype:c.subtype};
+    });
+    STAGED={}; updateSavebar(); renderGrid();
+  }).route({action:'setStatusBatch', actor_id, changes});
+}
+function discardAll(){ STAGED={}; updateSavebar(); renderGrid(); }
 
-      const put=(id,arr)=>{
-        const el=document.getElementById(id); el.innerHTML='';
-        if(!arr.length){ el.innerHTML='<span class="muted">—</span>'; return; }
-        arr.forEach(p=>{
-          const tag=document.createElement('span'); tag.className='tag';
-          tag.textContent=p.name ? `${p.name} (${p.pid})` : p.pid;
-          el.appendChild(tag);
-        });
-      };
-      put('mFree',r.Free||[]); put('mClass',r.Class||[]); put('mx',r.x||[]);
+/* Admin toggle mirrors server */
+function toggleAdminEdit(on){
+  const me=SESSION?.user?.user_id;
+  google.script.run.withSuccessHandler(res=>{
+    if(!res.ok){ alert(res.error||'Failed'); return; }
+    renderGrid();
+  }).route({action:'toggleAdminEdit', actor_id: me, on: !!on});
+}
 
-      document.getElementById('modalWrap').style.display='flex';
-    }
-    document.getElementById('mClose').onclick=()=>{ document.getElementById('modalWrap').style.display='none'; };
-
-    /* === save / refresh === */
-    function saveAll(){
-      if(!CURRENT_PID) return;
-      const rows=Object.keys(CURRENT).map(sid=>({person_id:CURRENT_PID,slot_id:sid,status:CURRENT[sid]||''}));
-      document.getElementById('status').textContent='Saving...';
-      google.script.run.withSuccessHandler(res=>{
-        document.getElementById('status').textContent=`✔ Saved (updated: ${res.updated}, inserted: ${res.inserted}) — refreshing…`;
-        refreshState();
-      }).withFailureHandler(err=>{
-        document.getElementById('status').textContent='Error: '+(err.message||err);
-      }).saveResponses(rows);
-    }
-    function refreshState(){
-      google.script.run.withSuccessHandler(st=>{
-        INIT.responsesByPerson=st.responsesByPerson;
-        COUNTS=st.countsBySlot||{}; ROSTER=st.rosterBySlot||{};
-        loadPersonGrid();
-        renderSchedule(); renderWeeklyCompact();
-        document.getElementById('status').textContent='Đã cập nhật.';
-      }).withFailureHandler(err=>{
-        document.getElementById('status').textContent='Refresh failed: '+(err.message||err);
-      }).getState();
-    }
-
-    /* === week nav / bootstrap === */
-    function applyWeekModel(res){
-      INIT=res; COUNTS=res.countsBySlot||{}; ROSTER=res.rosterBySlot||{};
-      document.getElementById('week').textContent=res.weekStart+' (GMT+7)';
-      document.getElementById('weekRange').textContent=' ['+res.weekRange.label+']';
-      renderPeople(); renderGrid(); if(INIT.people.length) loadPersonGrid();
-      ACTIVE_SID=null; document.getElementById('roster').style.display='none';
-      renderSchedule(); renderWeeklyCompact();
-    }
-    const prevWeek=()=>google.script.run.withSuccessHandler(applyWeekModel).withFailureHandler(e=>{document.getElementById('status').textContent='Prev failed: '+(e.message||e)}).changeWeek(-1);
-    const nextWeek=()=>google.script.run.withSuccessHandler(applyWeekModel).withFailureHandler(e=>{document.getElementById('status').textContent='Next failed: '+(e.message||e)}).changeWeek(1);
-
-    document.getElementById('saveBtn').onclick=saveAll;
-    document.getElementById('refreshBtn').onclick=refreshState;
-    document.getElementById('prevBtn').onclick=prevWeek;
-    document.getElementById('nextBtn').onclick=nextWeek;
-
-    // Weekly toggle (hide inline roster when entering compact)
-    const btnFull=document.getElementById('btnFull');
-    const btnCompact=document.getElementById('btnCompact');
-    btnFull.onclick=()=>{ 
-      btnFull.classList.add('active'); btnCompact.classList.remove('active'); 
-      document.getElementById('schedule').style.display='block'; 
-      document.getElementById('weeklyCompact').style.display='none';
-    };
-    btnCompact.onclick=()=>{ 
-      btnCompact.classList.add('active'); btnFull.classList.remove('active'); 
-      document.getElementById('schedule').style.display='none'; 
-      document.getElementById('weeklyCompact').style.display='block';
-      document.getElementById('roster').style.display='none';
-    };
-
-    /* ======= KẾT SỔ ======= */
-    (function(){
-      const seg = document.getElementById('periodSeg');
-      const btnSettle = document.getElementById('btnSettle');
-      const settleClose = document.getElementById('settleClose');
-      let PERIOD = 'week';
-
-      Array.from(seg.querySelectorAll('button')).forEach(btn=>{
-        btn.onclick = () => {
-          PERIOD = btn.dataset.period;
-          Array.from(seg.querySelectorAll('button')).forEach(b=>b.classList.remove('active'));
-          btn.classList.add('active');
-        };
-      });
-
-      function periodRange(period){
-        const d = isoToDate(INIT.weekStart); // Monday of selected week
-        const pad = n => (n<10? '0'+n : ''+n);
-        const iso = dt => `${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())}`;
-
-        if (period === 'week') {
-          const start = new Date(d);
-          const end   = new Date(d); end.setDate(end.getDate()+6);
-          return {start: iso(start), end: iso(end), label:`Tuần ${iso(start)} → ${iso(end)}`};
-        }
-        if (period === 'month') {
-          const start = new Date(d.getFullYear(), d.getMonth(), 1);
-          const end   = new Date(d.getFullYear(), d.getMonth()+1, 0);
-          return {start: iso(start), end: iso(end), label:`Tháng ${d.getMonth()+1}/${d.getFullYear()}`};
-        }
-        // term = 6-month half year
-        const m = d.getMonth();
-        const isH1 = (m < 6);
-        const start = new Date(d.getFullYear(), isH1 ? 0 : 6, 1);
-        const end   = new Date(d.getFullYear(), isH1 ? 6 : 12, 0);
-        return {start: iso(start), end: iso(end), label:`Kỳ ${isH1?'1':'2'} / ${d.getFullYear()}`};
-      }
-
-      function renderSettle(res){
-        const box = document.getElementById('settleBody');
-        box.innerHTML = '';
-        const title = document.getElementById('settleTitle');
-        title.textContent = `Kết sổ — ${res.range.label}`;
-
-        const tbl = document.createElement('table');
-        tbl.style.width = '100%';
-        tbl.style.borderCollapse = 'collapse';
-        tbl.innerHTML = `
-          <thead>
-            <tr>
-              <th style="text-align:left;border-bottom:1px solid #ddd;padding:8px">Người</th>
-              <th style="border-bottom:1px solid #ddd;padding:8px">x</th>
-              <th style="border-bottom:1px solid #ddd;padding:8px">Passed</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        `;
-        const tb = tbl.querySelector('tbody');
-
-        (res.rows || []).forEach(r=>{
-          const tr = document.createElement('tr');
-          tr.innerHTML = `
-            <td style="padding:8px;border-bottom:1px solid #eee;text-align:left">${r.name ? `${r.name} (${r.pid})` : r.pid}</td>
-            <td style="padding:8px;border-bottom:1px solid #eee;text-align:center">${r.x||0}</td>
-            <td style="padding:8px;border-bottom:1px solid #eee;text-align:center">${r.passed ? '✅' : '❌'}</td>
-          `;
-          tb.appendChild(tr);
-        });
-
-        if (!res.rows || !res.rows.length){
-          const empty = document.createElement('div');
-          empty.className = 'muted';
-          empty.textContent = 'Không có dữ liệu trong khoảng thời gian đã chọn.';
-          box.appendChild(empty);
-        } else {
-          box.appendChild(tbl);
-        }
-
-        document.getElementById('settleModal').style.display = 'flex';
-      }
-
-      btnSettle.onclick = () => {
-        if (!INIT) return;
-        const r = periodRange(PERIOD);
-        const args = { type: PERIOD, start: r.start, end: r.end };
-        document.getElementById('status').textContent = 'Đang kết sổ…';
-        google.script.run
-          .withSuccessHandler(res => {
-            document.getElementById('status').textContent = '';
-            renderSettle(res);
-          })
-          .withFailureHandler(err => {
-            document.getElementById('status').textContent = 'Kết sổ lỗi: ' + (err.message || err);
-          })
-          .settlePeriod(args);
-      };
-
-      settleClose.onclick = () => { document.getElementById('settleModal').style.display='none'; };
-    })();
-  </script>
+/* Monthly reminders (manual trigger) */
+function sendMonthly(){
+  const ym=prompt('Send reminders for YYYY-MM (leave blank to send for previous month):','');
+  let year=null,month=null; if(ym&&/^\d{4}-\d{2}$/.test(ym)){year=+ym.slice(0,4);month=+ym.slice(5);}
+  const btns=document.querySelectorAll('button'); btns.forEach(b=>b.disabled=true);
+  google.script.run.withSuccessHandler(res=>{
+    btns.forEach(b=>b.disabled=false);
+    if(!res.ok){ alert(res.error||'Failed'); return; }
+    alert(res.data.message||'Done');
+  }).route({action:'sendMonthlyReminders', year, month});
+}
+</script>
 </body>
 </html>
