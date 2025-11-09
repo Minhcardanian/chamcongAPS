@@ -8,10 +8,13 @@
  *    B) Google login: loginWithGoogle() — email must match /^\d+@student.vgu.edu.vn$/
  *       and person_id must exist in PEOPLE/Users
  *
- *  Admin Edit Mode:
- *    - OFF: members can edit only their own row; deadline lock enforced
- *    - ON : EVERYONE can edit ANY row and deadline is ignored (as requested)
+ *  Modes:
+ *    - Admin Edit Mode (ADMIN_EDIT_OVERRIDE): if ON, everyone can edit anyone and deadline ignored
+ *    - Matrix Read-Only (MATRIX_READ_ONLY): if ON, members cannot edit; admins can
  * ==================================================================== */
+
+/** Internal property keys (uses getProperties_() from config.js) */
+const PROP_MATRIX_RO = 'MATRIX_READ_ONLY';
 
 /** Serve the web UI */
 function doGet(e) {
@@ -46,7 +49,7 @@ function doPost(e) {
 
 /** Central dispatcher for all actions */
 function dispatch_(payload) {
-  const action = payload.action;
+  const action = payload && payload.action;
   switch (action) {
     case 'login':
       return { ok:true, data: login_(payload.user_key, payload.password) };
@@ -65,6 +68,9 @@ function dispatch_(payload) {
 
     case 'toggleAdminEdit':
       return { ok:true, data: handleToggleAdminEdit_(payload) };
+
+    case 'setMatrixRO':
+      return { ok:true, data: handleSetMatrixRO_(payload) };
 
     case 'sendMonthlyReminders':
       return { ok:true, data: emailMonthlyReminders(payload.year, payload.month) };
@@ -89,7 +95,7 @@ function _norm(s) {
 }
 
 function _listFromPeople_() {
-  const ss = SpreadsheetApp.getActive();
+  const ss = getSS();
   const sh = ss.getSheetByName('PEOPLE');
   if (!sh) return [];
   const rows = sh.getDataRange().getValues();
@@ -123,6 +129,15 @@ function _listUsersCombined_() {
   return _listFromPeople_();
 }
 
+function _withCommonSession_(me) {
+  return {
+    user: { user_id: me.user_id, name: me.name, email: me.email || '' },
+    is_admin: isAdminId_(me.user_id),
+    admin_edit_override: isAdminOverride_(),
+    read_only: isMatrixRO_()
+  };
+}
+
 /** Classic login: user_key=pname (or person_id), password=person_id */
 function login_(user_key, password) {
   if (!user_key || !password) throw new Error('Missing credentials');
@@ -148,11 +163,7 @@ function login_(user_key, password) {
   }
   if (!passOk) throw new Error('Invalid credentials');
 
-  return {
-    user: { user_id: me.user_id, name: me.name, email: me.email || '' },
-    is_admin: isAdminId_(me.user_id),
-    admin_edit_override: isAdminOverride_()
-  };
+  return _withCommonSession_(me);
 }
 
 /** Google login: email must be like 10423075@student.vgu.edu.vn and exist as person_id */
@@ -168,26 +179,32 @@ function loginWithGoogle_() {
   const me = users.find(u => String(u.user_id) === personId);
   if (!me) throw new Error('Your person_id is not in the PEOPLE/Users list.');
 
-  return {
-    user: { user_id: me.user_id, name: me.name, email: email },
-    is_admin: isAdminId_(me.user_id),
-    admin_edit_override: isAdminOverride_()
-  };
+  return _withCommonSession_(me);
 }
 
 /* ====================== ACTION HANDLERS ======================= */
 
 function handleGetWeek_(p) {
   const weekStartISO = p.weekStartISO || isoDate_(weekStartMonday_(now_()));
-  return loadWeekMatrix(weekStartISO);
+  const matrix = loadWeekMatrix(weekStartISO);
+  // include flags so client reflects accurate state
+  return Object.assign({}, matrix, {
+    admin_edit_override: isAdminOverride_(),
+    read_only: isMatrixRO_()
+  });
 }
 
-/** Centralized permission with new Admin Edit Mode behavior */
+/** Centralized permission with Admin Edit Mode + Matrix Read-Only */
 function _enforceEditPermission_(actor_id, target_user_id, dateISO) {
+  const actorIsAdmin = isAdminId_(String(actor_id));
+
+  // Hard lock: Matrix Read-Only blocks members, but not admins
+  if (isMatrixRO_() && !actorIsAdmin) {
+    throw new Error('Matrix is in read-only mode.');
+  }
+
   // If Admin Edit Mode is ON: everyone can edit anyone, and deadline ignored
   if (isAdminOverride_()) return;
-
-  const actorIsAdmin = isAdminId_(String(actor_id));
 
   if (!actorIsAdmin && String(actor_id) !== String(target_user_id)) {
     throw new Error('Not allowed to edit others.');
@@ -247,6 +264,22 @@ function handleToggleAdminEdit_(p) {
   if (!isAdminId_(String(actor_id))) throw new Error('Admin only');
   setAdminOverride_(!!on);
   return { admin_edit_override: isAdminOverride_() };
+}
+
+/** Matrix Read-Only handlers */
+function isMatrixRO_() {
+  return getProperties_().getProperty(PROP_MATRIX_RO) === 'true';
+}
+
+function setMatrixRO_(val) {
+  getProperties_().setProperty(PROP_MATRIX_RO, val ? 'true' : 'false');
+}
+
+function handleSetMatrixRO_(p) {
+  const { actor_id, on } = p;
+  if (!isAdminId_(String(actor_id))) throw new Error('Admin only');
+  setMatrixRO_(!!on);
+  return { read_only: isMatrixRO_() };
 }
 
 function handleGetAudit_(p) {

@@ -1,55 +1,57 @@
 /** Core business logic for shift registration (single cell per day) */
 
+/* ====================== BOOTSTRAP / SCHEMA ====================== */
+
 function bootstrapSheets() {
-  // Build (or reset) schema as requested => start fresh data
   const ss = getSS();
 
   // USERS
   {
     const sh = getOrCreateSheet_(SHEET_USERS);
     sh.clear();
-    sh.getRange(1,1,1,4).setValues([['user_id','name','email','role']]);
-    // NOTE: Leave population to admin (no demo users for privacy)
+    sh.getRange(1, 1, 1, 4).setValues([['user_id', 'name', 'email', 'role']]);
   }
 
-  // RESPONSES
+  // RESPONSES — canonical schema
   {
     const sh = getOrCreateSheet_(SHEET_RESPONSES);
     sh.clear();
-    sh.getRange(1,1,1,6)
-      .setValues([['date','user_id','status','subtype','updated_by','updated_ts']]);
+    sh.getRange(1, 1, 1, 6)
+      .setValues([['date', 'user_id', 'status', 'subtype', 'updated_by', 'updated_ts']]);
+    // Ensure "date" (col A) stays plain text for many future rows
+    sh.getRange(2, 1, Math.max(10000, sh.getMaxRows() - 1), 1).setNumberFormat('@');
   }
 
   // AUDIT
   {
     const sh = getOrCreateSheet_(SHEET_AUDIT);
     sh.clear();
-    sh.getRange(1,1,1,8).setValues([[
-      'ts','actor_id','user_id','date','prev_status','prev_subtype','new_status','new_subtype'
+    sh.getRange(1, 1, 1, 8).setValues([[
+      'ts', 'actor_id', 'user_id', 'date', 'prev_status', 'prev_subtype', 'new_status', 'new_subtype'
     ]]);
   }
 
   // SETTINGS
   {
     const sh = getOrCreateSheet_(SHEET_SETTINGS);
-    if (sh.getLastRow() === 0) {
-      sh.getRange(1,1,1,2).setValues([['key','value']]);
-    }
+    sh.clear();
+    sh.getRange(1, 1, 1, 2).setValues([['key', 'value']]);
   }
 
   // Turn OFF admin override by default
   setAdminOverride_(false);
 }
 
-/** Read from Users tab (if any) */
+/* ====================== USERS ====================== */
+
 function listUsersFromUsers_() {
   const sh = getOrCreateSheet_(SHEET_USERS);
   const rows = sh.getDataRange().getValues();
   const header = rows.shift() || [];
   if (!header.length || rows.length === 0) return [];
-  const idx = Object.fromEntries(header.map((h,i)=>[String(h).toLowerCase(),i]));
+  const idx = Object.fromEntries(header.map((h, i) => [String(h).toLowerCase(), i]));
   return rows
-    .filter(r => r[idx['user_id']] )
+    .filter(r => r[idx['user_id']])
     .map(r => ({
       user_id: String(r[idx['user_id']]),
       name: r[idx['name']] || '',
@@ -58,7 +60,6 @@ function listUsersFromUsers_() {
     }));
 }
 
-/** Fallback: read from PEOPLE tab when Users is empty */
 function listUsersFromPeople_() {
   const ss = getSS();
   const sh = ss.getSheetByName('PEOPLE');
@@ -68,26 +69,25 @@ function listUsersFromPeople_() {
   if (!header.length || rows.length === 0) return [];
 
   const map = {};
-  header.forEach((h,i) => map[String(h).toLowerCase()] = i);
-
-  function col() {
-    for (let k=0; k<arguments.length; k++) {
-      const key = String(arguments[k]).toLowerCase();
-      if (map.hasOwnProperty(key)) return map[key];
+  header.forEach((h, i) => (map[String(h).toLowerCase()] = i));
+  const col = (...names) => {
+    for (let n of names) {
+      const k = String(n).toLowerCase();
+      if (map.hasOwnProperty(k)) return map[k];
     }
     return -1;
-  }
+  };
 
-  const idCol   = col('person_id','user_id','id');
-  const nameCol = col('pname','name','full_name','fullname');
-  const mailCol = col('email','mail');
+  const idCol = col('person_id', 'user_id', 'id');
+  const nameCol = col('pname', 'name', 'full_name', 'fullname');
+  const mailCol = col('email', 'mail');
 
   if (idCol < 0 || nameCol < 0) return [];
 
   const out = [];
   rows.forEach(r => {
     const uid = r[idCol];
-    const nm  = r[nameCol];
+    const nm = r[nameCol];
     if (!uid || !nm) return;
     out.push({
       user_id: String(uid),
@@ -99,56 +99,72 @@ function listUsersFromPeople_() {
   return out;
 }
 
-/** Combined list; prefer Users, fallback to PEOPLE */
 function listUsers_() {
-  let users = [];
-  try { users = listUsersFromUsers_(); } catch (e) {}
-  if (users && users.length) return users;
+  try {
+    const u = listUsersFromUsers_();
+    if (u && u.length) return u;
+  } catch (e) {}
   return listUsersFromPeople_();
 }
 
+/* ====================== MATRIX LOAD ====================== */
+
 function loadWeekMatrix(weekStartISO) {
-  // Returns: { weekStartISO, days: [iso...], users:[{user_id,name}], data: {user_id:{iso:{status,subtype}}}, colors:{...} }
   const users = listUsers_();
   const start = parseISO_(weekStartISO);
-  const days = Array.from({length:7}, (_,i)=> {
+  const days = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(start.getTime());
-    d.setDate(d.getDate()+i);
+    d.setDate(d.getDate() + i);
     return isoDate_(d);
   });
 
   const data = {};
-  users.forEach(u => { data[u.user_id] = {}; });
+  users.forEach(u => (data[u.user_id] = {}));
 
-  // Pull responses for those dates
   const sh = getOrCreateSheet_(SHEET_RESPONSES);
   const rows = sh.getDataRange().getValues();
   const header = rows.shift() || [];
-  const idx = Object.fromEntries(header.map((h,i)=>[h,i]));
+
+  // Case-insensitive, alias-friendly header map
+  const hmap = {};
+  header.forEach((h, i) => (hmap[String(h).trim().toLowerCase()] = i));
+  const col = (...names) => {
+    for (let n of names) {
+      const k = String(n).trim().toLowerCase();
+      if (hmap.hasOwnProperty(k)) return hmap[k];
+    }
+    return -1;
+  };
+  const cDate = col('date', 'ngay', 'day');
+  const cUserId = col('user_id', 'userid', 'person_id', 'student_id', 'uid', 'id');
+  const cStatus = col('status', 'trangthai');
+  const cSubtype = col('subtype', 'sub_type', 'reason', 'note');
 
   const daySet = new Set(days);
-  const uidSet = new Set(users.map(u=>u.user_id));
+  const uidSet = new Set(users.map(u => u.user_id));
 
   rows.forEach(r => {
-    const date = r[idx.date];
-    const uid = String(r[idx.user_id] || '');
-    if (!daySet.has(date) || !uidSet.has(uid)) return;
-    const status = (r[idx.status] || '').toString().toUpperCase();
-    const subtype = (r[idx.subtype] || '').toString().toUpperCase();
-    data[uid][date] = normalizeStatus_(status, subtype);
+    const raw = r[cDate];
+    const dateISO = raw instanceof Date ? isoDate_(raw) : String(raw);
+    const uid = String(r[cUserId] || '');
+    if (!daySet.has(dateISO) || !uidSet.has(uid)) return;
+
+    const status = (r[cStatus] || '').toString().toUpperCase();
+    const subtype = (r[cSubtype] || '').toString().toUpperCase();
+    data[uid][dateISO] = normalizeStatus_(status, subtype);
   });
 
-  // Fill blanks (must not be blank → default OTHER)
-  users.forEach(u=>{
-    days.forEach(d=>{
-      if (!data[u.user_id][d]) data[u.user_id][d] = {status: STATUS_OTHER, subtype: ''};
+  // Fill blanks (default OTHER)
+  users.forEach(u => {
+    days.forEach(d => {
+      if (!data[u.user_id][d]) data[u.user_id][d] = { status: STATUS_OTHER, subtype: '' };
     });
   });
 
   return {
     weekStartISO,
     days,
-    users: users.map(({user_id, name})=>({user_id, name})),
+    users: users.map(({ user_id, name }) => ({ user_id, name })),
     data,
     colors: {
       REGISTERED: COLOR_REGISTERED,
@@ -159,87 +175,131 @@ function loadWeekMatrix(weekStartISO) {
   };
 }
 
+/* ====================== SAVE / NORMALIZE ====================== */
+
 function normalizeStatus_(status, subtype) {
   let s = (status || '').toUpperCase();
   let sub = (subtype || '').toUpperCase();
 
-  if (s === STATUS_REGISTERED) return {status: STATUS_REGISTERED, subtype: ''};
+  if (s === STATUS_REGISTERED) return { status: STATUS_REGISTERED, subtype: '' };
   if (s === STATUS_BUSY) {
     if (!BUSY_SUBTYPES.includes(sub)) sub = 'OTHER';
-    return {status: STATUS_BUSY, subtype: sub};
+    return { status: STATUS_BUSY, subtype: sub };
   }
-  // Anything else -> OTHER
-  return {status: STATUS_OTHER, subtype: ''};
+  return { status: STATUS_OTHER, subtype: '' };
 }
 
 function saveStatus(weekStartISO, dateISO, targetUserId, status, subtype, actorId) {
-  // Permission & lock checks are done in server router; here we just persist and audit.
   const normalized = normalizeStatus_(status, subtype);
 
   const sh = getOrCreateSheet_(SHEET_RESPONSES);
   const rows = sh.getDataRange().getValues();
   let header = rows.shift() || [];
   if (header.length === 0) {
-    header = ['date','user_id','status','subtype','updated_by','updated_ts'];
-    sh.getRange(1,1,1,header.length).setValues([header]);
+    header = ['date', 'user_id', 'status', 'subtype', 'updated_by', 'updated_ts'];
+    sh.getRange(1, 1, 1, header.length).setValues([header]);
   }
-  const idx = Object.fromEntries(header.map((h,i)=>[h,i]));
+
+  // case-insensitive header map + aliases
+  const hmap = {};
+  header.forEach((h, i) => (hmap[String(h).trim().toLowerCase()] = i));
+  const col = (...names) => {
+    for (let n of names) {
+      const k = String(n).trim().toLowerCase();
+      if (hmap.hasOwnProperty(k)) return hmap[k];
+    }
+    return -1;
+  };
+  const cDate = col('date', 'ngay', 'day');
+  const cUserId = col('user_id', 'userid', 'person_id', 'student_id', 'uid', 'id');
+  const cStatus = col('status', 'trangthai');
+  const cSubtype = col('subtype', 'sub_type', 'reason', 'note');
+  const cBy = col('updated_by', 'by', 'actor', 'updatedby');
+  const cTs = col('updated_ts', 'updated_at', 'timestamp', 'ts');
+
+  const nowTs = Utilities.formatDate(now_(), TZ, "yyyy-MM-dd' 'HH:mm:ss");
 
   // Find existing row by (date,user_id)
   let foundRow = null;
   rows.forEach((r, i) => {
-    if (String(r[idx.user_id]) === String(targetUserId) && r[idx.date] === dateISO) {
-      foundRow = {arr: r, rowNumber: i+2}; // +2 because header offset
+    const raw = r[cDate];
+    const dISO = raw instanceof Date ? isoDate_(raw) : String(raw);
+    const uid = String(r[cUserId] || '');
+    if (uid === String(targetUserId) && dISO === dateISO) {
+      foundRow = { rowNumber: i + 2, arr: r };
     }
   });
 
-  const prev = foundRow ? {
-    status: String(foundRow.arr[idx.status] || ''),
-    subtype: String(foundRow.arr[idx.subtype] || '')
-  } : {status: '', subtype: ''};
-
-  const nowTs = Utilities.formatDate(now_(), TZ, "yyyy-MM-dd' 'HH:mm:ss");
-
   if (foundRow) {
-    sh.getRange(foundRow.rowNumber, idx.status+1).setValue(normalized.status);
-    sh.getRange(foundRow.rowNumber, idx.subtype+1).setValue(normalized.subtype);
-    sh.getRange(foundRow.rowNumber, idx.updated_by+1).setValue(String(actorId));
-    sh.getRange(foundRow.rowNumber, idx.updated_ts+1).setValue(nowTs);
+    if (cStatus >= 0) sh.getRange(foundRow.rowNumber, cStatus + 1).setValue(normalized.status);
+    if (cSubtype >= 0) sh.getRange(foundRow.rowNumber, cSubtype + 1).setValue(normalized.subtype);
+    if (cBy >= 0) sh.getRange(foundRow.rowNumber, cBy + 1).setValue(String(actorId));
+    if (cTs >= 0) sh.getRange(foundRow.rowNumber, cTs + 1).setValue(nowTs);
   } else {
-    sh.appendRow([dateISO, String(targetUserId), normalized.status, normalized.subtype, String(actorId), nowTs]);
+    // Compose row in detected order
+    const maxIdx = Math.max(cDate, cUserId, cStatus, cSubtype, cBy, cTs);
+    const row = new Array(maxIdx + 1).fill('');
+    if (cDate >= 0) row[cDate] = dateISO;
+    if (cUserId >= 0) row[cUserId] = String(targetUserId);
+    if (cStatus >= 0) row[cStatus] = normalized.status;
+    if (cSubtype >= 0) row[cSubtype] = normalized.subtype;
+    if (cBy >= 0) row[cBy] = String(actorId);
+    if (cTs >= 0) row[cTs] = nowTs;
+    sh.appendRow(row);
+    // Keep the appended date cell as plain text
+    if (cDate >= 0) sh.getRange(sh.getLastRow(), cDate + 1).setNumberFormat('@');
   }
 
   // Audit trail
   const audit = getOrCreateSheet_(SHEET_AUDIT);
   audit.appendRow([
-    nowTs, String(actorId), String(targetUserId), dateISO,
-    prev.status, prev.subtype,
-    normalized.status, normalized.subtype
+    nowTs,
+    String(actorId),
+    String(targetUserId),
+    dateISO,
+    '', // prev_status (not tracked in this simplified write path)
+    '',
+    normalized.status,
+    normalized.subtype
   ]);
 
-  return {ok: true};
+  return { ok: true };
 }
 
+/* ====================== MONTHLY COUNTS & EMAIL ====================== */
+
 function computeMonthlyCounts_(year, month /*1-12*/) {
-  // returns { user_id: {count, byStatus:{REGISTERED:n, BUSY_INROOM:n, OTHER:n}} }
   const sh = getOrCreateSheet_(SHEET_RESPONSES);
   const rows = sh.getDataRange().getValues();
   const header = rows.shift() || [];
-  const idx = Object.fromEntries(header.map((h,i)=>[h,i]));
-  const res = {};
 
-  rows.forEach(r=>{
-    const dateISO = r[idx.date];
+  const hmap = {};
+  header.forEach((h, i) => (hmap[String(h).trim().toLowerCase()] = i));
+  const col = (...names) => {
+    for (let n of names) {
+      const k = String(n).trim().toLowerCase();
+      if (hmap.hasOwnProperty(k)) return hmap[k];
+    }
+    return -1;
+  };
+  const cDate = col('date', 'ngay', 'day');
+  const cUserId = col('user_id', 'userid', 'person_id', 'student_id', 'uid', 'id');
+  const cStatus = col('status', 'trangthai');
+  const cSubtype = col('subtype', 'sub_type', 'reason', 'note');
+
+  const res = {};
+  rows.forEach(r => {
+    const raw = r[cDate];
+    const dateISO = raw instanceof Date ? isoDate_(raw) : String(raw);
     if (!dateISO) return;
     const d = parseISO_(dateISO);
-    if ((d.getFullYear() !== year) || ((d.getMonth()+1) !== month)) return;
+    if (d.getFullYear() !== year || d.getMonth() + 1 !== month) return;
 
-    const uid = String(r[idx.user_id] || '');
-    const status = (r[idx.status] || '').toString().toUpperCase();
-    const subtype = (r[idx.subtype] || '').toString().toUpperCase();
+    const uid = String(r[cUserId] || '');
+    const status = (r[cStatus] || '').toString().toUpperCase();
+    const subtype = (r[cSubtype] || '').toString().toUpperCase();
 
-    if (!res[uid]) res[uid] = { count: 0, byStatus:{REGISTERED:0, BUSY_INROOM:0, OTHER:0} };
-
+    if (!res[uid]) res[uid] = { count: 0, byStatus: { REGISTERED: 0, BUSY_INROOM: 0, OTHER: 0 } };
     if (status === STATUS_REGISTERED) {
       res[uid].count += 1;
       res[uid].byStatus.REGISTERED++;
@@ -255,7 +315,6 @@ function computeMonthlyCounts_(year, month /*1-12*/) {
 }
 
 function emailMonthlyReminders(year, month) {
-  // If omitted, default to previous month (run on 1st)
   const now = now_();
   if (!year || !month) {
     const d = new Date(now.getTime());
@@ -268,13 +327,12 @@ function emailMonthlyReminders(year, month) {
   const counts = computeMonthlyCounts_(year, month);
 
   const behind = [];
-  users.forEach(u=>{
+  users.forEach(u => {
     const c = counts[u.user_id]?.count || 0;
-    if (c < MONTHLY_MIN_SHIFTS) behind.push({user: u, count: c});
+    if (c < MONTHLY_MIN_SHIFTS) behind.push({ user: u, count: c });
   });
 
-  // Helper: email fallback builder
-  const emailOf = (u) => {
+  const emailOf = u => {
     const mail = (u && u.email) ? String(u.email).trim() : '';
     if (mail && mail.indexOf('@') > -1) return mail;
     const pid = (u && u.user_id) ? String(u.user_id).trim() : '';
@@ -282,69 +340,63 @@ function emailMonthlyReminders(year, month) {
   };
 
   if (behind.length === 0) {
-    // Send a single summary email to admins
-    ADMINS.forEach(adminId=>{
-      const admin = users.find(u=>u.user_id === adminId);
+    ADMINS.forEach(adminId => {
+      const admin = users.find(u => u.user_id === adminId);
       const to = emailOf(admin) || Session.getActiveUser().getEmail();
       if (to) {
         MailApp.sendEmail({
           to,
-          subject: `[ChamCong] Monthly summary ${year}-${(''+month).padStart(2,'0')}`,
+          subject: `[ChamCong] Monthly summary ${year}-${('' + month).padStart(2, '0')}`,
           htmlBody: `<p>Congratulation no lates this month</p>`
         });
       }
     });
-    return {ok:true, message:'All passed. Admins notified.'};
+    return { ok: true, message: 'All passed. Admins notified.' };
   }
 
-  // Notify each who is behind
-  behind.forEach(({user, count})=>{
+  behind.forEach(({ user, count }) => {
     const diff = MONTHLY_MIN_SHIFTS - count;
     const to = emailOf(user);
     if (!to) return;
     MailApp.sendEmail({
       to,
-      subject: `[ChamCong] Monthly reminder ${year}-${(''+month).padStart(2,'0')}`,
+      subject: `[ChamCong] Monthly reminder ${year}-${('' + month).padStart(2, '0')}`,
       htmlBody: `<p>Hi ${user.name},</p>
 <p>You currently have <b>${count}</b> shifts, which is <b>${diff}</b> behind the standard minimum of <b>${MONTHLY_MIN_SHIFTS}</b> this month.</p>
 <p>Please coordinate with admins for upcoming schedules.</p>`
     });
   });
 
-  return {ok:true, message:`Notified ${behind.length} users`};
+  return { ok: true, message: `Notified ${behind.length} users` };
 }
 
-// === WEEK/DEADLINE ===
+/* ====================== WEEK/DEADLINE HELPERS ====================== */
 
-// Return Monday of the week containing given date
 function weekStartMonday_(d) {
   const dd = new Date(d.getFullYear(), d.getMonth(), d.getDate());
   const day = dd.getDay(); // 0=Sun..6=Sat
-  const diff = (day === 0 ? -6 : (1 - day)); // shift to Monday
+  const diff = (day === 0 ? -6 : (1 - day));
   dd.setDate(dd.getDate() + diff);
   return dd;
 }
 
-// Next week's Monday (relative to "now")
 function nextWeekMonday_() {
   const n = now_();
   const thisMonday = weekStartMonday_(n);
   const nextMon = new Date(thisMonday.getTime());
-  nextMon.setDate(thisMonday.getDate()+7);
+  nextMon.setDate(thisMonday.getDate() + 7);
   return nextMon;
 }
 
-// Deadline is Sunday 23:59 local, right before nextMon
 function nextWeekDeadline_() {
   const nextMon = nextWeekMonday_();
   const dl = new Date(nextMon.getTime());
-  dl.setMinutes(-1); // 23:59 of the previous day (Sunday)
+  dl.setMinutes(-1); // 23:59 Sunday
   return dl;
 }
 
 function isEditableForMember_(targetDateISO) {
-  // Members can only edit the *next week* grid until Sunday 23:59
-  if (isAdminOverride_()) return true; // admin override (and, per server, also everyone-can-edit)
+  if (isAdminOverride_()) return true; // everyone can edit; deadline ignored
   const now = now_();
   const target = parseISO_(targetDateISO);
   const targetWeekStart = weekStartMonday_(target);
