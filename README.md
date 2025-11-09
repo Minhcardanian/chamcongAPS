@@ -104,7 +104,8 @@ flowchart TD
     A[Frontend login()] --> B{Google sign-in?}
     B -- Yes --> C[server.gs: loginWithGoogle_]
     B -- No --> D[server.gs: login_]
-    C & D --> E[server.gs: dispatch_('login')]
+    C --> E[server.gs: dispatch_(login)]
+    D --> E
     E --> F[server.gs: _withCommonSession_]
     F --> G[index.html: finishLogin()]
     G --> H[index.html: loadWeek()]
