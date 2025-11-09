@@ -100,42 +100,46 @@ Event listeners in the script also guard against unsaved navigation (`beforeunlo
 ## Application Flows
 
 ```mermaid
-flowchart TD
-    A[Frontend login()] --> B{Google sign-in?}
-    B -- Yes --> C[server.gs: loginWithGoogle_]
-    B -- No --> D[server.gs: login_]
-    C --> E[server.gs: dispatch_(login)]
-    D --> E
-    E --> F[server.gs: _withCommonSession_]
-    F --> G[index.html: finishLogin()]
-    G --> H[index.html: loadWeek()]
-    H --> I[index.html: renderGrid()]
-```
+graph TD
+    %% Login and initial load
+    subgraph Login_and_Initial_Load
+        A["Frontend login()"] --> B{"Google sign-in?"}
+        B -->|Yes| C["server.gs: loginWithGoogle_"]
+        B -->|No| D["server.gs: login_"]
+        C --> E["server.gs: dispatch_(login)"]
+        D --> E
+        E --> F["server.gs: _withCommonSession_"]
+        F --> G["index.html: finishLogin()"]
+        G --> H["index.html: loadWeek()"]
+    end
 
-```mermaid
-flowchart TD
-    A[index.html: loadWeek()] --> B{Unsaved edits?}
-    B -- Yes --> C[index.html: saveAllThen()]
-    C --> D[server.gs: handleSetStatusBatch_]
-    D --> E[chamcong.gs: saveStatus()]
-    E --> F[index.html: _performLoadWeek()]
-    B -- No --> F
-    F --> G[server.gs: handleGetWeek_]
-    G --> H[chamcong.gs: loadWeekMatrix()]
-    H --> I[index.html: renderGrid()]
-```
+    %% Week loading and batch save
+    subgraph Week_Load_Flow
+        H --> I{"Unsaved edits?"}
+        I -->|Yes| J["index.html: saveAllThen()"]
+        J --> K["server.gs: handleSetStatusBatch_"]
+        K --> L["chamcong.gs: saveStatus()"]
+        L --> M["index.html: _performLoadWeek()"]
+        I -->|No| M
+        M --> N["server.gs: handleGetWeek_"]
+        N --> O["chamcong.gs: loadWeekMatrix()"]
+        O --> P["index.html: renderGrid()"]
+    end
 
-```mermaid
-flowchart TD
-    A[index.html: onCellClick()] --> B[index.html: saveAll()]
-    B --> C[index.html: saveAllThen()]
-    C --> D[server.gs: handleSetStatus_]
-    D --> E[server.gs: _enforceEditPermission_]
-    E --> F{Allowed?}
-    F -- No --> G[index.html: toastRO()]
-    F -- Yes --> H[chamcong.gs: saveStatus()]
-    H --> I[chamcong.gs: Audit log update]
-    I --> J[index.html: renderGrid()]
+    %% Cell click, single update, and permission checks
+    subgraph Cell_Click_and_Update_Flow
+        P --> Q["index.html: onCellClick()"]
+        Q --> R["index.html: saveAll()"]
+        R --> S["index.html: saveAllThen()"]
+        S --> T["server.gs: handleSetStatus_"]
+        T --> U["server.gs: _enforceEditPermission_"]
+        U --> V{"Allowed?"}
+        V -->|No| W["index.html: toastRO()"]
+        V -->|Yes| X["chamcong.gs: saveStatus()"]
+        X --> Y["chamcong.gs: Audit log update"]
+        Y --> P
+    end
+
 ```
 
 ## Scheduled/Trigger Functions
