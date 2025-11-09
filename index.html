@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-app-version="v-2025-11-04-mobile">
+<html lang="en" data-app-version="v-2025-11-09-mobile-vertical">
 <head>
   <meta charset="utf-8" />
   <title>ChamCong / Shift Registration</title>
@@ -32,6 +32,7 @@
     button[disabled]{opacity:.6; cursor:not-allowed}
     .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 
+    /* Desktop table grid */
     .grid{overflow:auto;border:1px solid var(--border);border-radius:12px;background:#fff; -webkit-overflow-scrolling: touch;}
     table{border-collapse:separate;border-spacing:0;width:100%;min-width:820px}
     th,td{padding:10px 12px;border-bottom:1px solid var(--border);border-right:1px solid var(--border)}
@@ -39,6 +40,18 @@
     thead th{position:sticky;top:0;background:#fff;z-index:3}
     td.cell{cursor:pointer;text-align:center;font-weight:600;border-left:1px solid var(--border);height:44px}
     td.cell.disabled{cursor:not-allowed; opacity:.7}
+
+    /* Mobile vertical list */
+    .mobile-list{display:none; border:1px solid var(--border); border-radius:12px; background:#fff;}
+    .ml-head{padding:10px 12px; border-bottom:1px solid var(--border); font-weight:700;}
+    .ml-row{display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px; border-top:1px solid var(--border);}
+    .ml-row:first-of-type{border-top:0;}
+    .ml-left{display:flex; flex-direction:column; gap:2px;}
+    .ml-date{font-weight:700;}
+    .ml-dow{font-size:12px; color:var(--muted);}
+    .ml-btn{min-width:140px; text-align:center; border-radius:999px; padding:10px 12px; font-weight:800; border:1px solid var(--border); cursor:pointer;}
+    .ml-btn.disabled{opacity:.6; cursor:not-allowed}
+    .ml-note{font-size:12px;color:var(--muted);margin-top:8px}
 
     .legend{display:flex;gap:10px;flex-wrap:wrap}
     .dot{width:12px;height:12px;border-radius:50%;display:inline-block;margin-right:6px}
@@ -121,7 +134,7 @@
         <div>
           <label>Week starting (Mon)</label>
           <input id="weekStart" type="date" />
-          <div class="note">Loads Monday–Sunday for the selected week.</div>
+          <div class="note">Loads Monday–Sunday for the selected week (GMT+7).</div>
         </div>
         <button type="button" onclick="loadWeek()">Load</button>
       </div>
@@ -146,15 +159,11 @@
           <input id="adminOverride" type="checkbox" onchange="toggleAdminEdit(this.checked)" />
           <label for="adminOverride" style="margin:0">Admin Edit Mode (ignores deadline & lets everyone edit)</label>
         </div>
-        <div class="pill" style="gap:10px; margin-top:8px">
-          <input id="matrixRO" type="checkbox" onchange="toggleMatrixRO(this.checked)" />
-          <label for="matrixRO" style="margin:0">Matrix Read-Only (members cannot edit)</label>
-        </div>
         <div class="row" style="margin-top:8px">
-          <button type="button" onclick="sendMonthly()">Send Monthly Reminders</button>
+          <button type="button" onclick="sendMonthly(event)">Send Monthly Reminders</button>
         </div>
       </div>
-      <p class="foot">Members can edit only their own row while the week is open (until Sunday 23:59). Admins can always edit. When Read-Only is ON, members cannot edit.</p>
+      <p class="foot">Members can edit only their own row while the week is open (until Sunday 23:59, Asia/Ho_Chi_Minh). Admins can always edit.</p>
     </div>
 
     <div class="rightpane">
@@ -171,10 +180,14 @@
           </div>
         </div>
 
+        <!-- Desktop grid -->
         <div id="grid" class="grid"></div>
 
+        <!-- Mobile vertical list -->
+        <div id="gridMobile" class="mobile-list" aria-hidden="true"></div>
+
         <p class="note">
-          Click a cell to cycle: Blank → Registered → Busy (then pick subtype). Admins can edit all; members can edit their own row when open.
+          Click to cycle: Blank → Registered → Busy (then pick subtype). Admins can edit all; members can edit their own row when open.
         </p>
       </div>
     </div>
@@ -194,78 +207,32 @@
 <script>
 const LS_KEY = 'chamcong:lastWeekStart';
 let SESSION=null;
-let CURRENT={days:[],users:[],data:{},colors:{},weekStartISO:null, read_only:false};
+let CURRENT={days:[],users:[],data:{},colors:{},weekStartISO:null};
 let STAGED={};
 let PICKER_CTX=null;
 
-/* ====== Unsaved-changes protection on week switch / page exit ====== */
-const AUTOSAVE_ON_WEEK_SWITCH = false; // set true to silently save before switching
-
-function hasDirty(){ return Object.keys(STAGED).length > 0; }
-
-/* Toasts */
-function toast(msg, ms=1400){
-  const t=document.createElement('div');
-  t.textContent=msg;
-  Object.assign(t.style,{position:'fixed',left:'50%',bottom:'24px',transform:'translateX(-50%)',
-    padding:'10px 14px',borderRadius:'10px',background:'#111827',color:'#fff',fontSize:'14px',
-    boxShadow:'0 6px 20px rgba(0,0,0,.25)',zIndex:2147483647});
-  document.body.appendChild(t);
-  setTimeout(()=>t.remove(),ms);
-}
-function toastRO(){ toast('Read-only mode is ON.'); }
-
-/* Monday normalizer */
-function toMondayISO(iso){
-  // iso = yyyy-mm-dd, any day → return that week's Monday as yyyy-mm-dd
-  if(!iso) return iso;
-  const [y,m,d]=iso.split('-').map(Number);
-  const dt=new Date(y,m-1,d);
-  const dow=dt.getDay(); // 0..6, Sun=0
-  const diff=(dow===0?-6:1-dow);
-  dt.setDate(dt.getDate()+diff);
-  const pad=n=>String(n).padStart(2,'0');
-  return `${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())}`;
-}
-
-/* Save helper that RELOADS from server after commit */
-function saveAllThen(cb){
-  const changes = Object.values(STAGED);
-  if (!changes.length) { cb && cb(); return; }
-  if (SESSION?.read_only && !SESSION?.is_admin) { toastRO(); return; }
-
-  const btn = document.getElementById('saveBtn');
-  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
-  const actor_id = SESSION?.user?.user_id;
-
-  google.script.run.withSuccessHandler(res=>{
-    if (btn) btn.textContent='Save';
-    if(!res.ok){ alert(res.error||'Save failed'); if (btn) btn.disabled=false; return; }
-
-    // After successful commit, clear staged and reload authoritative data
-    STAGED={}; updateSavebar();
-    const weekISO = toMondayISO(document.getElementById('weekStart').value || CURRENT.weekStartISO);
-    _performLoadWeek(weekISO);  // server read
-    toast('Saved', 900);
-    cb && cb();
-  }).route({action:'setStatusBatch', actor_id, changes});
-}
-
-window.addEventListener('beforeunload', (e)=>{
-  if (!hasDirty()) return;
-  e.preventDefault();
-  e.returnValue = '';
-});
-
-/* ====== Helpers ====== */
 function keyFor(u,d){return `${u}__${d}`;}
 function updateSavebar(){
   const n=Object.keys(STAGED).length;
   document.getElementById('dirtyCount').textContent = n===1 ? '1 change' : `${n} changes`;
   const saveBtn = document.getElementById('saveBtn');
-  saveBtn.disabled = (n===0) || (SESSION?.read_only && !SESSION?.is_admin);
-  const show = n>0 && !(SESSION?.read_only && !SESSION?.is_admin);
+  const locked = (SESSION?.read_only && !SESSION?.is_admin);
+  saveBtn.disabled = (n===0) || locked;
+  const show = n>0 && !locked;
   document.getElementById('savebar').classList.toggle('show', show);
+}
+
+/* Toast for RO attempts */
+function toastRO(){
+  if (window.__ro_ts && Date.now()-window.__ro_ts<1500) return;
+  window.__ro_ts = Date.now();
+  const t=document.createElement('div');
+  t.textContent='Read-only mode is ON.';
+  Object.assign(t.style,{position:'fixed',left:'50%',bottom:'24px',transform:'translateX(-50%)',
+    padding:'10px 14px',borderRadius:'10px',background:'#111827',color:'#fff',fontSize:'14px',
+    boxShadow:'0 6px 20px rgba(0,0,0,.25)',zIndex:2147483647});
+  document.body.appendChild(t);
+  setTimeout(()=>t.remove(),1600);
 }
 
 /* -------- Login UI state -------- */
@@ -326,23 +293,22 @@ function finishLogin(d){
   document.getElementById('who').textContent  = `${d.user.name} (${d.user.user_id})`;
   document.getElementById('role').textContent = d.is_admin ? 'Admin' : 'Member';
 
+  // Admin bar & member view toggle
   const adminBar      = document.getElementById('adminBar');
   const adminOverride = document.getElementById('adminOverride');
   const viewToggle    = document.getElementById('viewToggle');
   const showAll       = document.getElementById('showAll');
-  const matrixRO      = document.getElementById('matrixRO');
 
   if (d.is_admin) {
     adminBar.style.display = '';
     adminOverride.checked = !!d.admin_edit_override;
-    matrixRO.checked = !!SESSION.read_only;
-    viewToggle.style.display = 'none';
+    viewToggle.style.display = 'none';        // admins always see all
     if (showAll) showAll.checked = true;
   } else {
     adminBar.style.display   = 'none';
-    adminOverride.checked    = !!d.admin_edit_override;
+    adminOverride.checked    = !!d.admin_edit_override; // ignored here
     viewToggle.style.display = '';
-    if (showAll) showAll.checked = false;
+    if (showAll) showAll.checked = false;               // default: own row only
   }
 
   // initial week (remember last, else admins:this week, members:next week)
@@ -374,16 +340,15 @@ function logout(){
   document.getElementById('pwd').value='';
 }
 
-/* -------- Load week (with Monday snap + dirty-guard) -------- */
+/* -------- Load week -------- */
 function setGridLoading(on){
   document.getElementById('grid').innerHTML = on?'<div class="muted" style="padding:12px">Loading table…</div>':'';
+  document.getElementById('gridMobile').innerHTML = '';
 }
-
-function _performLoadWeek(weekStartISO){
+function loadWeek(){
+  STAGED={}; updateSavebar();
+  const weekStartISO = document.getElementById('weekStart').value;
   try { localStorage.setItem(LS_KEY, weekStartISO); } catch(e){}
-  // Make sure the input also shows the normalized Monday
-  document.getElementById('weekStart').value = weekStartISO;
-
   setGridLoading(true);
   google.script.run.withSuccessHandler(res=>{
     setGridLoading(false);
@@ -391,32 +356,16 @@ function _performLoadWeek(weekStartISO){
       document.getElementById('grid').innerHTML=`<div class="error" style="padding:12px">${res.error||'Failed to load'}</div>`;
       return;
     }
-    CURRENT = Object.assign({read_only:false, weekStartISO}, res.data || {});
+    // Sync flags from server too
+    CURRENT = res.data || {};
     if (typeof CURRENT.read_only === 'boolean') {
       SESSION.read_only = CURRENT.read_only;
-      const ro = document.getElementById('matrixRO');
-      if (ro && SESSION.is_admin) ro.checked = SESSION.read_only;
-      reflectReadOnlyUI();
     }
-    STAGED={}; updateSavebar(); renderGrid();
+    renderGrid();
   }).route({action:'getWeek', weekStartISO});
 }
 
-function loadWeek(){
-  const picked = document.getElementById('weekStart').value || '';
-  const weekStartISO = toMondayISO(picked);
-  if (!hasDirty()) { _performLoadWeek(weekStartISO); return; }
-
-  if (AUTOSAVE_ON_WEEK_SWITCH) {
-    saveAllThen(()=> _performLoadWeek(weekStartISO));
-  } else {
-    const ok = confirm('You have unsaved changes. Save them before switching weeks?');
-    if (ok) saveAllThen(()=> _performLoadWeek(weekStartISO));
-    // If cancelled, stay on current week and keep STAGED.
-  }
-}
-
-/* -------- Grid render & interaction -------- */
+/* -------- Helpers -------- */
 function colorFor(status, subtype){
   status=(status||'').toUpperCase(); subtype=(subtype||'').toUpperCase();
   if(status==='REGISTERED') return 'var(--green)';
@@ -430,17 +379,42 @@ function labelFor(status, subtype){
   if(status==='BUSY'&&subtype) return `BUSY (${subtype})`;
   return status||'BLANK';
 }
+function dowName(dISO){
+  const d = new Date(dISO + 'T00:00:00');
+  return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()];
+}
+function isNarrow(){ return window.innerWidth <= 768; }
 
+/* -------- Grid render (desktop + mobile) -------- */
 function renderGrid(){
-  const g=document.getElementById('grid');
-  if(!CURRENT.days.length){ g.innerHTML='<div class="muted" style="padding:12px">No data</div>'; return; }
-
+  if (!CURRENT.days || !CURRENT.days.length){
+    document.getElementById('grid').innerHTML='<div class="muted" style="padding:12px">No data</div>';
+    document.getElementById('gridMobile').innerHTML='';
+    return;
+  }
   const canSeeAll = SESSION?.is_admin || (document.getElementById('showAll')?.checked === true);
+  const usersToRender = canSeeAll ? CURRENT.users : CURRENT.users.filter(u => u.user_id === SESSION?.user?.user_id);
 
-  const usersToRender = canSeeAll
-    ? CURRENT.users
-    : CURRENT.users.filter(u => u.user_id === SESSION?.user?.user_id);
+  const useMobile = !canSeeAll && usersToRender.length === 1 && isNarrow();
 
+  // Toggle containers
+  document.getElementById('grid').style.display = useMobile ? 'none' : '';
+  const gm = document.getElementById('gridMobile');
+  gm.style.display = useMobile ? 'block' : 'none';
+  gm.setAttribute('aria-hidden', useMobile ? 'false' : 'true');
+
+  if (useMobile) {
+    renderGridMobile(usersToRender[0]);
+  } else {
+    renderGridDesktop(usersToRender);
+  }
+
+  updateSavebar();
+  reflectReadOnlyUI();
+}
+
+function renderGridDesktop(usersToRender){
+  const g=document.getElementById('grid');
   let html='<table><thead><tr><th>Name</th>';
   CURRENT.days.forEach(d=> html+=`<th>${d}</th>`);
   html+='</tr></thead><tbody>';
@@ -468,12 +442,40 @@ function renderGrid(){
 
   html+='</tbody></table>';
   g.innerHTML=html;
-
-  updateSavebar();
-  reflectReadOnlyUI();
 }
 
-/* Click cycle: BLANK → REGISTERED → BUSY → BLANK */
+function renderGridMobile(user){
+  const wrap = document.getElementById('gridMobile');
+
+  let html = `<div class="ml-head">${user.name}</div>`;
+  CURRENT.days.forEach(d=>{
+    const k = keyFor(user.user_id,d);
+    const base=(CURRENT.data[user.user_id]||{})[d]||{status:'OTHER',subtype:''};
+    const cell=STAGED[k]||base;
+    const label=labelFor(cell.status,cell.subtype);
+    const bg=colorFor(cell.status,cell.subtype);
+
+    const lockedByRO = (SESSION?.read_only && !SESSION?.is_admin);
+    const disabled = lockedByRO ? 'disabled' : '';
+    const handler = lockedByRO ? '' : `onclick="onCellClickMobile(event,'${user.user_id}','${d}')"`;
+
+    html += `
+      <div class="ml-row">
+        <div class="ml-left">
+          <div class="ml-date">${d}</div>
+          <div class="ml-dow">${dowName(d)}</div>
+        </div>
+        <div class="ml-btn ${disabled}" style="background:${bg}; color:#fff;" ${handler}>
+          ${label}
+        </div>
+      </div>`;
+  });
+  html += `<div class="ml-note">Tap the status pill to cycle. Busy opens subtype picker.</div>`;
+
+  wrap.innerHTML = html;
+}
+
+/* Click cycle handlers */
 function onCellClick(ev, user_id, dateISO) {
   ev.stopPropagation();
   hidePicker();
@@ -496,6 +498,7 @@ function onCellClick(ev, user_id, dateISO) {
     renderGrid(); updateSavebar();
   }
 }
+function onCellClickMobile(ev, user_id, dateISO){ onCellClick(ev, user_id, dateISO); }
 
 /* Picker */
 function openPicker(x,y){
@@ -524,48 +527,63 @@ document.querySelectorAll('#picker .opt').forEach(el=>{
 /* Save / Discard */
 function saveAll(){
   if (SESSION?.read_only && !SESSION?.is_admin) { toastRO(); return; }
-  if (!hasDirty()) return;
+  const changes=Object.values(STAGED);
+  if(!changes.length) return;
   const btn=document.getElementById('saveBtn');
   btn.disabled=true; btn.textContent='Saving…';
+  const actor_id=SESSION?.user?.user_id;
 
-  // Delegate to the unified helper that reloads after save
-  saveAllThen(()=>{ if (btn) { btn.disabled=false; btn.textContent='Save'; } });
+  google.script.run.withSuccessHandler(res=>{
+    btn.textContent='Save';
+    if(!res.ok){ alert(res.error||'Save failed'); btn.disabled=false; return; }
+    changes.forEach(c=>{
+      CURRENT.data[c.target_user_id]=CURRENT.data[c.target_user_id]||{};
+      CURRENT.data[c.target_user_id][c.dateISO]={status:c.status, subtype:c.subtype};
+    });
+    STAGED={}; updateSavebar(); renderGrid();
+  }).withFailureHandler(err=>{
+    btn.textContent='Save';
+    btn.disabled=false;
+    alert((err && err.message) || 'Save failed');
+  }).route({action:'setStatusBatch', actor_id, changes});
 }
 function discardAll(){ STAGED={}; updateSavebar(); renderGrid(); }
 
-/* Admin toggle mirrors server; keep SESSION in sync */
+/* Admin Edit toggle (server-backed) */
 function toggleAdminEdit(on){
   const me = SESSION?.user?.user_id;
-  google.script.run.withSuccessHandler(res=>{
-    if(!res.ok){ alert(res.error||'Failed'); return; }
-    SESSION.admin_edit_override = !!res.data.admin_edit_override;
-    const cb = document.getElementById('adminOverride');
-    if (cb) cb.checked = SESSION.admin_edit_override;
-    renderGrid();
-  }).route({action:'toggleAdminEdit', actor_id: me, on: !!on});
+  google.script.run
+    .withSuccessHandler(res=>{
+      if(!res.ok){ alert(res.error||'Failed'); return; }
+      SESSION.admin_edit_override = !!res.data.admin_edit_override;
+      const cb = document.getElementById('adminOverride');
+      if (cb) cb.checked = SESSION.admin_edit_override;
+      renderGrid();
+    })
+    .withFailureHandler(err=>{
+      // Revert checkbox on error
+      const cb = document.getElementById('adminOverride');
+      if (cb) cb.checked = !!SESSION?.admin_edit_override;
+      alert((err && err.message) || 'Failed to toggle Admin Edit Mode');
+    })
+    .route({action:'toggleAdminEdit', actor_id: me, on: !!on});
 }
 
-/* Admin: Matrix Read-Only toggle (server-backed) */
-function toggleMatrixRO(on){
-  const me = SESSION?.user?.user?.user_id || SESSION?.user?.user_id;
-  google.script.run.withSuccessHandler(res=>{
-    if(!res.ok){ alert(res.error||'Failed'); return; }
-    SESSION.read_only = !!res.data.read_only;
-    const ro = document.getElementById('matrixRO'); if (ro) ro.checked = SESSION.read_only;
-    reflectReadOnlyUI();
-    renderGrid();
-  }).route({action:'setMatrixRO', actor_id: me, on: !!on});
-}
-
-/* Monthly reminders (manual trigger) */
-function sendMonthly(){
+/* Monthly reminders (manual trigger, robust) */
+function sendMonthly(ev){
   const ym=prompt('Send reminders for YYYY-MM (leave blank to send for previous month):','');
-  let year=null,month=null; if(ym&&/^\d{4}-\d{2}$/.test(ym)){year=+ym.slice(0,4);month=+ym.slice(5);}
-  const btns=document.querySelectorAll('button'); btns.forEach(b=>b.disabled=true);
+  let year=null,month=null;
+  if(ym&&/^\d{4}-\d{2}$/.test(ym)){year=+ym.slice(0,4);month=+ym.slice(5);}
+  const btn = ev?.target;
+  if (btn && btn.tagName==='BUTTON') btn.disabled = true;
+
   google.script.run.withSuccessHandler(res=>{
-    btns.forEach(b=>b.disabled=false);
+    if (btn) btn.disabled = false;
     if(!res.ok){ alert(res.error||'Failed'); return; }
     alert(res.data.message||'Done');
+  }).withFailureHandler(err=>{
+    if (btn) btn.disabled = false;
+    alert((err && err.message) || 'Failed to send reminders');
   }).route({action:'sendMonthlyReminders', year, month});
 }
 
@@ -574,13 +592,11 @@ function reflectReadOnlyUI(){
   const badge = document.getElementById('roBadge');
   const appCard = badge?.closest('.card');
   const isRO = !!(SESSION?.read_only);
-  if (badge && appCard) {
-    appCard.classList.toggle('show-ro', isRO);
-  }
+  if (badge && appCard) { appCard.classList.toggle('show-ro', isRO); }
   updateSavebar();
 }
 
-/* Member view label patch (unchanged behavior) */
+/* Member view label patch */
 (function () {
   const wrap = document.getElementById('viewToggle');
   const cb   = document.getElementById('showAll');
@@ -601,11 +617,15 @@ function reflectReadOnlyUI(){
     lbl.textContent = cb.checked
       ? 'Showing everyone (read-only)'
       : 'Show full matrix (read-only)';
+    renderGrid(); // re-render when toggled to swap layouts if needed
   };
 
   cb.addEventListener('change', update);
   update();
 })();
+
+/* Re-render on resize to switch layouts dynamically */
+window.addEventListener('resize', () => { if (SESSION) renderGrid(); });
 </script>
 </body>
 </html>
