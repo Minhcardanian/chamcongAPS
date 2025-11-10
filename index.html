@@ -205,13 +205,38 @@
   </div>
 
 <script>
+/* -------------------------------------------------------------
+   State
+------------------------------------------------------------- */
 const LS_KEY = 'chamcong:lastWeekStart';
 let SESSION=null;
-let CURRENT={days:[],users:[],data:{},colors:{},weekStartISO:null};
+let CURRENT={days:[],users:[],data:{},colors:{},weekStartISO:null, read_only:false};
 let STAGED={};
 let PICKER_CTX=null;
 
+/* -------------------------------------------------------------
+   Small helpers
+------------------------------------------------------------- */
 function keyFor(u,d){return `${u}__${d}`;}
+function isNarrow(){ return window.innerWidth <= 768; }
+function colorFor(status, subtype){
+  status=(status||'').toUpperCase(); subtype=(subtype||'').toUpperCase();
+  if(status==='REGISTERED') return 'var(--green)';
+  if(status==='BUSY'&&subtype==='IN-ROOM') return 'var(--yellow)';
+  if(status==='BUSY') return 'var(--red)';
+  return 'var(--gray)';
+}
+function labelFor(status, subtype){
+  status=(status||'').toUpperCase(); subtype=(subtype||'').toUpperCase();
+  if(status==='OTHER'&&!subtype) return 'BLANK';
+  if(status==='BUSY'&&subtype) return `BUSY (${subtype})`;
+  return status||'BLANK';
+}
+function dowName(dISO){
+  const d = new Date(dISO + 'T00:00:00');
+  return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()];
+}
+
 function updateSavebar(){
   const n=Object.keys(STAGED).length;
   document.getElementById('dirtyCount').textContent = n===1 ? '1 change' : `${n} changes`;
@@ -235,7 +260,9 @@ function toastRO(){
   setTimeout(()=>t.remove(),1600);
 }
 
-/* -------- Login UI state -------- */
+/* -------------------------------------------------------------
+   Auth + session wiring
+------------------------------------------------------------- */
 function setLoginState(isLoading,msg,isError){
   const btn=document.getElementById('loginBtn');
   const box=document.getElementById('loginMsg');
@@ -246,7 +273,6 @@ function setLoginState(isLoading,msg,isError){
   box.className=isError?'error':'status';
 }
 
-/* -------- Classic login -------- */
 function login(){
   const user_key=document.getElementById('uid').value.trim();
   const password=document.getElementById('pwd').value;
@@ -262,7 +288,6 @@ function login(){
     .route({action:'login', user_key, password});
 }
 
-/* -------- Google login -------- */
 function loginWithGoogle(){
   const btn = event?.target;
   if (btn) { btn.disabled = true; btn.textContent = 'Signing in…'; }
@@ -302,13 +327,13 @@ function finishLogin(d){
   if (d.is_admin) {
     adminBar.style.display = '';
     adminOverride.checked = !!d.admin_edit_override;
-    viewToggle.style.display = 'none';        // admins always see all
+    viewToggle.style.display = 'none';
     if (showAll) showAll.checked = true;
   } else {
     adminBar.style.display   = 'none';
-    adminOverride.checked    = !!d.admin_edit_override; // ignored here
+    adminOverride.checked    = !!d.admin_edit_override;
     viewToggle.style.display = '';
-    if (showAll) showAll.checked = false;               // default: own row only
+    if (showAll) showAll.checked = false;
   }
 
   // initial week (remember last, else admins:this week, members:next week)
@@ -329,7 +354,6 @@ function finishLogin(d){
   loadWeek();
 }
 
-/* -------- Logout -------- */
 function logout(){
   SESSION=null; STAGED={};
   document.getElementById('app').style.display='none';
@@ -340,52 +364,40 @@ function logout(){
   document.getElementById('pwd').value='';
 }
 
-/* -------- Load week -------- */
+/* -------------------------------------------------------------
+   Week loading + rendering
+------------------------------------------------------------- */
 function setGridLoading(on){
   document.getElementById('grid').innerHTML = on?'<div class="muted" style="padding:12px">Loading table…</div>':'';
   document.getElementById('gridMobile').innerHTML = '';
 }
+
 function loadWeek(){
   STAGED={}; updateSavebar();
   const weekStartISO = document.getElementById('weekStart').value;
   try { localStorage.setItem(LS_KEY, weekStartISO); } catch(e){}
   setGridLoading(true);
-  google.script.run.withSuccessHandler(res=>{
-    setGridLoading(false);
-    if(!res.ok){
-      document.getElementById('grid').innerHTML=`<div class="error" style="padding:12px">${res.error||'Failed to load'}</div>`;
-      return;
-    }
-    // Sync flags from server too
-    CURRENT = res.data || {};
-    if (typeof CURRENT.read_only === 'boolean') {
-      SESSION.read_only = CURRENT.read_only;
-    }
-    renderGrid();
-  }).route({action:'getWeek', weekStartISO});
+  google.script.run
+    .withSuccessHandler(res=>{
+      setGridLoading(false);
+      if(!res.ok){
+        document.getElementById('grid').innerHTML=`<div class="error" style="padding:12px">${res.error||'Failed to load'}</div>`;
+        return;
+      }
+      CURRENT = res.data || {};
+      if (typeof CURRENT.read_only === 'boolean') {
+        SESSION.read_only = CURRENT.read_only;
+      }
+      renderGrid();
+    })
+    .withFailureHandler(err=>{
+      setGridLoading(false);
+      document.getElementById('grid').innerHTML =
+        `<div class="error" style="padding:12px">${(err && err.message) || 'Network error while loading week'}</div>`;
+    })
+    .route({action:'getWeek', weekStartISO});
 }
 
-/* -------- Helpers -------- */
-function colorFor(status, subtype){
-  status=(status||'').toUpperCase(); subtype=(subtype||'').toUpperCase();
-  if(status==='REGISTERED') return 'var(--green)';
-  if(status==='BUSY'&&subtype==='IN-ROOM') return 'var(--yellow)';
-  if(status==='BUSY') return 'var(--red)';
-  return 'var(--gray)';
-}
-function labelFor(status, subtype){
-  status=(status||'').toUpperCase(); subtype=(subtype||'').toUpperCase();
-  if(status==='OTHER'&&!subtype) return 'BLANK';
-  if(status==='BUSY'&&subtype) return `BUSY (${subtype})`;
-  return status||'BLANK';
-}
-function dowName(dISO){
-  const d = new Date(dISO + 'T00:00:00');
-  return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()];
-}
-function isNarrow(){ return window.innerWidth <= 768; }
-
-/* -------- Grid render (desktop + mobile) -------- */
 function renderGrid(){
   if (!CURRENT.days || !CURRENT.days.length){
     document.getElementById('grid').innerHTML='<div class="muted" style="padding:12px">No data</div>';
@@ -475,7 +487,9 @@ function renderGridMobile(user){
   wrap.innerHTML = html;
 }
 
-/* Click cycle handlers */
+/* -------------------------------------------------------------
+   Cell interactions + picker
+------------------------------------------------------------- */
 function onCellClick(ev, user_id, dateISO) {
   ev.stopPropagation();
   hidePicker();
@@ -500,7 +514,6 @@ function onCellClick(ev, user_id, dateISO) {
 }
 function onCellClickMobile(ev, user_id, dateISO){ onCellClick(ev, user_id, dateISO); }
 
-/* Picker */
 function openPicker(x,y){
   const p=document.getElementById('picker');
   const pad=8, w=220, h=p.offsetHeight||140;
@@ -524,7 +537,9 @@ document.querySelectorAll('#picker .opt').forEach(el=>{
   });
 });
 
-/* Save / Discard */
+/* -------------------------------------------------------------
+   Save / discard
+------------------------------------------------------------- */
 function saveAll(){
   if (SESSION?.read_only && !SESSION?.is_admin) { toastRO(); return; }
   const changes=Object.values(STAGED);
@@ -533,23 +548,28 @@ function saveAll(){
   btn.disabled=true; btn.textContent='Saving…';
   const actor_id=SESSION?.user?.user_id;
 
-  google.script.run.withSuccessHandler(res=>{
-    btn.textContent='Save';
-    if(!res.ok){ alert(res.error||'Save failed'); btn.disabled=false; return; }
-    changes.forEach(c=>{
-      CURRENT.data[c.target_user_id]=CURRENT.data[c.target_user_id]||{};
-      CURRENT.data[c.target_user_id][c.dateISO]={status:c.status, subtype:c.subtype};
-    });
-    STAGED={}; updateSavebar(); renderGrid();
-  }).withFailureHandler(err=>{
-    btn.textContent='Save';
-    btn.disabled=false;
-    alert((err && err.message) || 'Save failed');
-  }).route({action:'setStatusBatch', actor_id, changes});
+  google.script.run
+    .withSuccessHandler(res=>{
+      btn.textContent='Save';
+      if(!res.ok){ alert(res.error||'Save failed'); btn.disabled=false; return; }
+      changes.forEach(c=>{
+        CURRENT.data[c.target_user_id]=CURRENT.data[c.target_user_id]||{};
+        CURRENT.data[c.target_user_id][c.dateISO]={status:c.status, subtype:c.subtype};
+      });
+      STAGED={}; updateSavebar(); renderGrid();
+    })
+    .withFailureHandler(err=>{
+      btn.textContent='Save';
+      btn.disabled=false;
+      alert((err && err.message) || 'Save failed');
+    })
+    .route({action:'setStatusBatch', actor_id, changes});
 }
 function discardAll(){ STAGED={}; updateSavebar(); renderGrid(); }
 
-/* Admin Edit toggle (server-backed) */
+/* -------------------------------------------------------------
+   Admin actions
+------------------------------------------------------------- */
 function toggleAdminEdit(on){
   const me = SESSION?.user?.user_id;
   google.script.run
@@ -561,7 +581,6 @@ function toggleAdminEdit(on){
       renderGrid();
     })
     .withFailureHandler(err=>{
-      // Revert checkbox on error
       const cb = document.getElementById('adminOverride');
       if (cb) cb.checked = !!SESSION?.admin_edit_override;
       alert((err && err.message) || 'Failed to toggle Admin Edit Mode');
@@ -569,7 +588,6 @@ function toggleAdminEdit(on){
     .route({action:'toggleAdminEdit', actor_id: me, on: !!on});
 }
 
-/* Monthly reminders (manual trigger, robust) */
 function sendMonthly(ev){
   const ym=prompt('Send reminders for YYYY-MM (leave blank to send for previous month):','');
   let year=null,month=null;
@@ -577,17 +595,24 @@ function sendMonthly(ev){
   const btn = ev?.target;
   if (btn && btn.tagName==='BUTTON') btn.disabled = true;
 
-  google.script.run.withSuccessHandler(res=>{
-    if (btn) btn.disabled = false;
-    if(!res.ok){ alert(res.error||'Failed'); return; }
-    alert(res.data.message||'Done');
-  }).withFailureHandler(err=>{
-    if (btn) btn.disabled = false;
-    alert((err && err.message) || 'Failed to send reminders');
-  }).route({action:'sendMonthlyReminders', year, month});
+  const actor_id = SESSION?.user?.user_id;
+
+  google.script.run
+    .withSuccessHandler(res=>{
+      if (btn) btn.disabled = false;
+      if(!res.ok){ alert(res.error||'Failed'); return; }
+      alert(res.data.message||'Done');
+    })
+    .withFailureHandler(err=>{
+      if (btn) btn.disabled = false;
+      alert((err && err.message) || 'Failed to send reminders');
+    })
+    .route({action:'sendMonthlyReminders', actor_id, year, month});
 }
 
-/* Read-only badge + savebar visibility */
+/* -------------------------------------------------------------
+   UI bits
+------------------------------------------------------------- */
 function reflectReadOnlyUI(){
   const badge = document.getElementById('roBadge');
   const appCard = badge?.closest('.card');
@@ -626,6 +651,20 @@ function reflectReadOnlyUI(){
 
 /* Re-render on resize to switch layouts dynamically */
 window.addEventListener('resize', () => { if (SESSION) renderGrid(); });
+
+/* -------------------------------------------------------------
+   Expose handlers for HtmlService inline events
+------------------------------------------------------------- */
+window.login = login;
+window.loginWithGoogle = loginWithGoogle;
+window.loadWeek = loadWeek;
+window.logout = logout;
+window.onCellClick = onCellClick;
+window.onCellClickMobile = onCellClickMobile;
+window.saveAll = saveAll;
+window.discardAll = discardAll;
+window.toggleAdminEdit = toggleAdminEdit;
+window.sendMonthly = sendMonthly;
 </script>
 </body>
 </html>
