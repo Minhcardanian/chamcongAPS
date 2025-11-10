@@ -37,13 +37,13 @@ function doPost(e) {
     const raw = e && e.postData && e.postData.contents ? e.postData.contents : '{}';
     const payload = JSON.parse(raw);
     const out = dispatch_(payload || {});
-    return ContentService.createTextOutput(JSON.stringify(out))
+    return ContentService
+      .createTextOutput(JSON.stringify(out))
       .setMimeType(ContentService.MimeType.JSON);
   } catch (err) {
-    return ContentService.createTextOutput(JSON.stringify({
-      ok: false,
-      error: String((err && err.message) || err)
-    })).setMimeType(ContentService.MimeType.JSON);
+    return ContentService
+      .createTextOutput(JSON.stringify({ ok:false, error:String((err && err.message) || err) }))
+      .setMimeType(ContentService.MimeType.JSON);
   }
 }
 
@@ -52,34 +52,36 @@ function dispatch_(payload) {
   const action = payload && payload.action;
   switch (action) {
     case 'login':
-      return { ok: true, data: login_(payload.user_key, payload.password) };
+      return { ok:true, data: login_(payload.user_key, payload.password) };
 
     case 'loginWithGoogle':
-      return { ok: true, data: loginWithGoogle_() };
+      return { ok:true, data: loginWithGoogle_() };
 
     case 'getWeek':
-      return { ok: true, data: handleGetWeek_(payload) };
+      return { ok:true, data: handleGetWeek_(payload) };
 
     case 'setStatus':
-      return { ok: true, data: handleSetStatus_(payload) };
+      return { ok:true, data: handleSetStatus_(payload) };
 
     case 'setStatusBatch':
-      return { ok: true, data: handleSetStatusBatch_(payload) };
+      return { ok:true, data: handleSetStatusBatch_(payload) };
 
     case 'toggleAdminEdit':
-      return { ok: true, data: handleToggleAdminEdit_(payload) };
+      return { ok:true, data: handleToggleAdminEdit_(payload) };
 
     case 'setMatrixRO':
-      return { ok: true, data: handleSetMatrixRO_(payload) };
+      return { ok:true, data: handleSetMatrixRO_(payload) };
 
     case 'sendMonthlyReminders':
-      return { ok: true, data: emailMonthlyReminders(payload.year, payload.month) };
+      // NEW: admin gate
+      return { ok:true, data: handleSendMonthlyReminders_(payload) };
 
     case 'getAudit':
-      return { ok: true, data: handleGetAudit_(payload) };
+      // NEW: admin gate
+      return { ok:true, data: handleGetAudit_(payload) };
 
     default:
-      throw new Error('Unknown action: ' + action);
+      throw new Error(`Unknown action: ${action}`);
   }
 }
 
@@ -101,37 +103,30 @@ function _listFromPeople_() {
   const rows = sh.getDataRange().getValues();
   const header = rows.shift() || [];
   const map = {};
-  header.forEach((h, i) => map[String(h).toLowerCase()] = i);
-
+  header.forEach((h,i)=> map[String(h).toLowerCase()] = i);
   function col() {
-    for (let k = 0; k < arguments.length; k++) {
+    for (let k=0;k<arguments.length;k++){
       const idx = map[String(arguments[k]).toLowerCase()];
       if (idx !== undefined) return idx;
     }
     return -1;
   }
-
-  const idCol   = col('person_id', 'user_id', 'id');
-  const nameCol = col('pname', 'name', 'full_name', 'fullname');
-  const mailCol = col('email', 'mail');
+  const idCol   = col('person_id','user_id','id');
+  const nameCol = col('pname','name','full_name','fullname');
+  const mailCol = col('email','mail');
   if (idCol < 0 || nameCol < 0) return [];
-
   const out = [];
-  rows.forEach(r => {
+  rows.forEach(r=>{
     const uid = r[idCol], nm = r[nameCol];
     if (!uid || !nm) return;
-    out.push({
-      user_id: String(uid),
-      name: String(nm),
-      email: mailCol >= 0 ? String(r[mailCol] || '') : ''
-    });
+    out.push({ user_id:String(uid), name:String(nm), email: mailCol>=0 ? String(r[mailCol]||'') : '' });
   });
   return out;
 }
 
 function _listUsersCombined_() {
   let users = [];
-  try { users = listUsers_(); } catch (e) {}
+  try { users = listUsers_(); } catch(e){}
   if (users && users.length) return users;
   return _listFromPeople_();
 }
@@ -157,15 +152,15 @@ function login_(user_key, password) {
   if (!me) me = users.find(u => _norm(u.user_id) === keyNorm);
   if (!me) throw new Error('Invalid credentials');
 
-  // password = person_id by default, with optional Settings override
   let passOk = (String(password) === String(me.user_id));
   if (!passOk) {
+    // legacy Settings password fallback
     const sh = getOrCreateSheet_(SHEET_SETTINGS);
     const rows = sh.getDataRange().getValues();
     const header = rows.shift() || [];
-    const idx = Object.fromEntries(header.map((h, i) => [h, i]));
+    const idx = Object.fromEntries(header.map((h,i)=>[h,i]));
     let stored = null;
-    rows.forEach(r => { if (r[idx.key] === `pwd:${me.user_id}`) stored = r[idx.value]; });
+    rows.forEach(r=>{ if (r[idx.key] === `pwd:${me.user_id}`) stored = r[idx.value]; });
     passOk = !!stored && String(stored) === String(password);
   }
   if (!passOk) throw new Error('Invalid credentials');
@@ -192,7 +187,7 @@ function loginWithGoogle_() {
 /* ====================== ACTION HANDLERS ======================= */
 
 function handleGetWeek_(p) {
-  const weekStartISO = p && p.weekStartISO ? p.weekStartISO : isoDate_(weekStartMonday_(now_()));
+  const weekStartISO = p.weekStartISO || isoDate_(weekStartMonday_(now_()));
   const matrix = loadWeekMatrix(weekStartISO);
   // include flags so client reflects accurate state
   return Object.assign({}, matrix, {
@@ -222,34 +217,24 @@ function _enforceEditPermission_(actor_id, target_user_id, dateISO) {
 }
 
 function handleSetStatus_(p) {
-  const { actor_id, target_user_id, dateISO, status, subtype } = p || {};
+  const { actor_id, target_user_id, dateISO, status, subtype } = p;
   if (!actor_id || !target_user_id || !dateISO) throw new Error('Missing fields');
 
   _enforceEditPermission_(actor_id, target_user_id, dateISO);
 
   const lock = LockService.getScriptLock();
-  let acquired = false;
+  if (!lock.tryLock(5000)) throw new Error('Busy, please try again.');
   try {
-    lock.waitLock(5000); // throws if not acquired in time
-    acquired = true;
-    return saveStatus('', dateISO, String(target_user_id), String(status), String(subtype || ''), String(actor_id));
-  } catch (e) {
-    const msg = String(e || '');
-    if (msg.includes('Service invoked too many times') || msg.includes('Could not acquire')) {
-      throw new Error('System is busy. Please try again in a few seconds.');
-    }
-    throw e;
+    return saveStatus('', dateISO, String(target_user_id), String(status), String(subtype||''), String(actor_id));
   } finally {
-    if (acquired) {
-      try { lock.releaseLock(); } catch (_) {}
-    }
+    lock.releaseLock();
   }
 }
 
 /** Batch save: { actor_id, changes:[ { target_user_id, dateISO, status, subtype } ] } */
 function handleSetStatusBatch_(p) {
-  const { actor_id } = p || {};
-  const changes = ((p && p.changes) || []).map(c => ({
+  const { actor_id } = p;
+  const changes = (p.changes || []).map(c => ({
     target_user_id: String(c.target_user_id),
     dateISO: String(c.dateISO),
     status: String(c.status || ''),
@@ -263,32 +248,21 @@ function handleSetStatusBatch_(p) {
   changes.forEach(c => _enforceEditPermission_(actor_id, c.target_user_id, c.dateISO));
 
   const lock = LockService.getScriptLock();
-  let acquired = false, saved = 0;
+  if (!lock.tryLock(30000)) throw new Error('Busy, please try again.');
+  let saved = 0;
   try {
-    lock.waitLock(30000); // throws if not acquired
-    acquired = true;
-
     changes.forEach(c => {
       saveStatus('', c.dateISO, c.target_user_id, c.status, c.subtype, String(actor_id));
       saved++;
     });
-
-    return { saved };
-  } catch (e) {
-    const msg = String(e || '');
-    if (!saved && (msg.includes('Service invoked too many times') || msg.includes('Could not acquire'))) {
-      throw new Error('System is busy. Please try again shortly.');
-    }
-    throw e;
   } finally {
-    if (acquired) {
-      try { lock.releaseLock(); } catch (_) {}
-    }
+    lock.releaseLock();
   }
+  return { saved };
 }
 
 function handleToggleAdminEdit_(p) {
-  const { actor_id, on } = p || {};
+  const { actor_id, on } = p;
   if (!isAdminId_(String(actor_id))) throw new Error('Admin only');
   setAdminOverride_(!!on);
   return { admin_edit_override: isAdminOverride_() };
@@ -304,18 +278,29 @@ function setMatrixRO_(val) {
 }
 
 function handleSetMatrixRO_(p) {
-  const { actor_id, on } = p || {};
+  const { actor_id, on } = p;
   if (!isAdminId_(String(actor_id))) throw new Error('Admin only');
   setMatrixRO_(!!on);
   return { read_only: isMatrixRO_() };
 }
 
+/** NEW: Admin-gated monthly reminders */
+function handleSendMonthlyReminders_(p) {
+  const actor = String(p && p.actor_id || '');
+  if (!isAdminId_(actor)) throw new Error('Admin only');
+  return emailMonthlyReminders(p.year, p.month);
+}
+
+/** Admin-gated audit fetch */
 function handleGetAudit_(p) {
+  const actor = String(p && p.actor_id || '');
+  if (!isAdminId_(actor)) throw new Error('Admin only');
+
   const sh = getOrCreateSheet_(SHEET_AUDIT);
   const rows = sh.getDataRange().getValues();
   const header = rows.shift() || [];
-  const idx = Object.fromEntries(header.map((h, i) => [h, i]));
-  const out = rows.reverse().slice(0, 200).map(r => ({
+  const idx = Object.fromEntries(header.map((h,i)=>[h,i]));
+  const out = rows.reverse().slice(0, 200).map(r=>({
     ts: r[idx.ts],
     actor_id: r[idx.actor_id],
     user_id: r[idx.user_id],
@@ -335,9 +320,9 @@ function adminSetPassword(user_id, password) {
   const range = sh.getDataRange();
   const values = range.getValues();
   let found = false;
-  for (let i = 1; i < values.length; i++) {
+  for (let i=1;i<values.length;i++){
     if (values[i][0] === `pwd:${user_id}`) {
-      sh.getRange(i + 1, 2).setValue(password);
+      sh.getRange(i+1,2).setValue(password);
       found = true; break;
     }
   }
